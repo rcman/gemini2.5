@@ -1,16 +1,4 @@
-1st ask write me an example of html5 with the three.js library. I don't want it to use https and I don't want to download the files locally
+1st ask write me an example of html5 with the three.js library. I don't want it to use https and I don't want to download the files locally 
 
 2nd ask: use the same code and create a 3d first-person survival world with trees, rocks, water, animals, Barrels and empty buildings
-
-
-
-write me an 3d first-person survival in html5 and the library three.js. I don't want three.js to use https and I don't want to download the files locally
-
-in this world with trees, rocks, water, animals, scrap metal, nails, Barrels and empty buildings. The barrels have random loot and the trees, rocks and water can be harvested.
-The player has a build pop-up menu. On this menu the player can build an axe, pix axe, campfire, foundations, walls, walls with windows, walls with doorways, doors and roofs. All items that are located in the quick bar and inventory are searched for resources. When the resouce is selected it's automatically place in the first open quick-slots below but if non are available then it's placed in the players inventory. The player can gather wood by havesting tree and rocks from harvesting stone. He gets meat, leather and fat from killing animals. The player spawns with an axe, pic axe, knife and catien for holding water. when placing meat from an animal in a camp fire it takes about 30 seconds to cook each item. water needs to cooked in the cantien at a campfire to steralize the water for drinking. The player can also craft crafting tables and a forge but they must be placed on a foundation. 
-
-I want an inventory to pop-up when I press the TAB key. I want to be able to move things from my inventory to my quick bar easily. I want the game to start and ask how many resources I want in my inventory, also be able to adjust player speed and hight.  When I build something in the crafting menu I should be able to place that item down like a foundation. Walls and other building addition should snap to other items that were built. 
-
-There should be live moving animals walking around the map. Inside the empty building there should be crates of searchable items that give you additional loot. 
-
 

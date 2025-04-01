@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js HTTP Survival Craft Build (Embed Controls)</title>
+    <style>
+        /* --- Same CSS as before --- */
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; }
+        canvas { display: block; }
+        #blocker { position: absolute; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 20; /* Ensure blocker is on top */ }
+        #instructions { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; font-size: 14px; cursor: pointer; color: white; }
+        .ui-panel { position: absolute; background-color: rgba(0, 0, 0, 0.7); color: white; padding: 10px; border: 1px solid #555; border-radius: 5px; font-size: 12px; max-height: 80vh; overflow-y: auto; z-index: 10; }
+        #inventory-ui { bottom: 60px; left: 10px; min-width: 150px; }
+        #crafting-ui { top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; min-width: 300px; }
+        #toolbar-ui { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; background-color: rgba(0, 0, 0, 0.5); border: 1px solid #555; border-radius: 3px; z-index: 10;}
+        .toolbar-slot { width: 40px; height: 40px; border: 1px solid #777; margin: 2px; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; position: relative; cursor: pointer; background-color: rgba(255, 255, 255, 0.1); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .toolbar-slot.selected { border: 2px solid yellow; }
+        .toolbar-slot .count { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: rgba(0,0,0,0.7); padding: 1px 2px; border-radius: 2px;}
+        .crafting-recipe button { margin-left: 10px; padding: 2px 5px; cursor: pointer;}
+        .crafting-recipe button:disabled { cursor: default; opacity: 0.5; }
+        .crafting-recipe { margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center;}
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background-color: white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; mix-blend-mode: difference; z-index: 5; }
+        h4 { margin-top: 0; margin-bottom: 8px; border-bottom: 1px solid #666; padding-bottom: 4px; }
+        #build-indicator { position: absolute; border: 1px dashed rgba(255, 255, 255, 0.5); pointer-events: none; box-sizing: border-box; display: none; z-index: 4; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size: 36px">Click to play</p>
+            <p>
+                Move: WASD | Jump: SPACE | Look: MOUSE<br/>
+                Open/Close Crafting: C | Place Selected Item: Right-Click<br/>
+                Select Toolbar Slot: 1-9
+            </p>
+             <p id="loading-error" style="color: red; margin-top: 20px;"></p>
+        </div>
+    </div>
+
+    <div id="crosshair">+</div>
+    <div id="build-indicator"></div>
+
+    <!-- UI Elements -->
+    <div id="inventory-ui" class="ui-panel"><h4>Inventory</h4><div id="inventory-list"></div></div>
+    <div id="crafting-ui" class="ui-panel"><h4>Crafting</h4><div id="crafting-list"></div><button onclick="toggleCraftingMenu()" style="margin-top: 10px;">Close [C]</button></div>
+    <div id="toolbar-ui"></div>
+
+
+    <!-- Load Three.js core library from HTTP CDN -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- ### EMBED PointerLockControls.js Code HERE ### -->
+    <script>
+        // Copied from https://github.com/mrdoob/three.js/blob/r128/examples/js/controls/PointerLockControls.js
+        // (Paste the *entire* content of the file here)
+        THREE.PointerLockControls = function ( camera, domElement ) {
+
+            if ( domElement === undefined ) {
+
+                console.warn( 'THREE.PointerLockControls: The second parameter "domElement" is now mandatory.' );
+                domElement = document.body;
+
+            }
+
+            this.domElement = domElement;
+            this.isLocked = false;
+
+            // Set to constrain the pitch of the camera
+            // Range is 0 to Math.PI radians
+            this.minPolarAngle = 0; // radians
+            this.maxPolarAngle = Math.PI; // radians
+
+            //
+            // internals
+            //
+
+            var scope = this;
+
+            var changeEvent = { type: 'change' };
+            var lockEvent = { type: 'lock' };
+            var unlockEvent = { type: 'unlock' };
+
+            var euler = new THREE.Euler( 0, 0, 0, 'YXZ' );
+
+            var PI_2 = Math.PI / 2;
+
+            var vec = new THREE.Vector3();
+
+            function onMouseMove( event ) {
+
+                if ( scope.isLocked === false ) return;
+
+                var movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                var movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+                euler.setFromQuaternion( camera.quaternion );
+
+                euler.y -= movementX * 0.002;
+                euler.x -= movementY * 0.002;
+
+                euler.x = Math.max( PI_2 - scope.maxPolarAngle, Math.min( PI_2 - scope.minPolarAngle, euler.x ) );
+
+                camera.quaternion.setFromEuler( euler );
+
+                scope.dispatchEvent( changeEvent );
+
+            }
+
+            function onPointerlockChange() {
+
+                if ( document.pointerLockElement === scope.domElement ) {
+
+                    scope.dispatchEvent( lockEvent );
+
+                    scope.isLocked = true;
+
+                } else {
+
+                    scope.dispatchEvent( unlockEvent );
+
+                    scope.isLocked = false;
+
+                }
+
+            }
+
+            function onPointerlockError() {
+
+                console.error( 'THREE.PointerLockControls: Unable to use Pointer Lock API' );
+
+            }
+
+            this.connect = function () {
+
+                document.addEventListener( 'mousemove', onMouseMove, false );
+                document.addEventListener( 'pointerlockchange', onPointerlockChange, false );
+                document.addEventListener( 'pointerlockerror', onPointerlockError, false );
+
+            };
+
+            this.disconnect = function () {
+
+                document.removeEventListener( 'mousemove', onMouseMove, false );
+                document.removeEventListener( 'pointerlockchange', onPointerlockChange, false );
+                document.removeEventListener( 'pointerlockerror', onPointerlockError, false );
+
+            };
+
+            this.dispose = function () {
+
+                this.disconnect();
+
+            };
+
+            this.getObject = function () { // retaining this method for backward compatibility
+
+                return camera;
+
+            };
+
+            this.getDirection = function () {
+
+                var direction = new THREE.Vector3( 0, 0, - 1 );
+
+                return function ( v ) {
+
+                    return v.copy( direction ).applyQuaternion( camera.quaternion );
+
+                };
+
+            }();
+
+            this.moveForward = function ( distance ) {
+
+                // move forward parallel to the xz-plane
+                // assumes camera.up is y-up
+
+                vec.setFromMatrixColumn( camera.matrix, 0 );
+
+                vec.crossVectors( camera.up, vec );
+
+                camera.position.addScaledVector( vec, distance );
+
+            };
+
+            this.moveRight = function ( distance ) {
+
+                vec.setFromMatrixColumn( camera.matrix, 0 );
+
+                camera.position.addScaledVector( vec, distance );
+
+            };
+
+            this.lock = function () {
+
+                this.domElement.requestPointerLock();
+
+            };
+
+            this.unlock = function () {
+
+                document.exitPointerLock();
+
+            };
+
+            this.connect();
+
+        };
+
+        THREE.PointerLockControls.prototype = Object.create( THREE.EventDispatcher.prototype );
+        THREE.PointerLockControls.prototype.constructor = THREE.PointerLockControls;
+
+    </script>
+    <!-- ### END EMBED PointerLockControls.js Code ### -->
+
+
+    <!-- Main Game Logic Script -->
+    <script>
+        // --- Debug Flag ---
+        const DEBUG = true; // Set to true for extra console logs
+
+        // Declare variables at the top
+        let camera, scene, renderer, controls;
+        const objects = [];
+        const placedObjects = [];
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const worldScale = 200;
+        const playerHeight = 1;
+        const inventory = {};
+        let selectedToolbarIndex = 0;
+        const toolbarItems = [];
+        let buildIndicatorMesh = null;
+        const STARTING_INVENTORY = { 'wood': 80, 'stone': 60, 'leaves': 20 };
+        const MAX_TOOLBAR_SLOTS = 9;
+        const PLACEMENT_GRID_SIZE = 2;
+        const PLACEMENT_REACH = 8;
+        const foundationW = PLACEMENT_GRID_SIZE * 2, foundationH = 0.5, foundationD = PLACEMENT_GRID_SIZE * 2;
+        const wallW = foundationW, wallH = 3, wallD = 0.3;
+        const doorW = 1.5, doorH = wallH * 0.9, doorD = 0.2;
+        const roofW = foundationW, roofH = 0.3, roofD = foundationD;
+        const items = { /* ... item definitions ... */ 'wood':{name:'Wood',placeable:true,color:10160019,geometry:new THREE.BoxGeometry(1,1,2),buildType:'resource'},'stone':{name:'Stone',placeable:true,color:8421504,geometry:new THREE.BoxGeometry(.8,.8,.8),buildType:'resource'},'leaves':{name:'Leaves',placeable:true,color:2263842,geometry:new THREE.BoxGeometry(1.5,.3,1.5),buildType:'resource'},'planks':{name:'Planks',placeable:true,color:14596231,geometry:new THREE.BoxGeometry(.2,1,2),buildType:'material'},'workbench':{name:'Workbench',placeable:true,color:13467647,geometry:new THREE.BoxGeometry(2,1,1),buildType:'utility'},'torch':{name:'Torch',placeable:true,color:16766720,geometry:new THREE.CylinderGeometry(.1,.1,1,8),light:!0,buildType:'utility'},'foundation':{name:'Foundation',placeable:true,color:7829367,geometry:new THREE.BoxGeometry(foundationW,foundationH,foundationD),buildType:'foundation'},'wall':{name:'Wall',placeable:true,color:11184810,geometry:new THREE.BoxGeometry(wallW,wallH,wallD),buildType:'wall'},'wall_window':{name:'Wall (Window)',placeable:true,color:11184827,geometry:new THREE.BoxGeometry(wallW,wallH,wallD),buildType:'wall'},'wall_door':{name:'Wall (Door)',placeable:true,color:11189162,geometry:new THREE.BoxGeometry(wallW,wallH,wallD),buildType:'wall'},'door':{name:'Door',placeable:true,color:9127197,geometry:new THREE.BoxGeometry(doorW,doorH,doorD),buildType:'door'},'roof':{name:'Roof',placeable:true,color:6710886,geometry:new THREE.BoxGeometry(roofW,roofH,roofD),buildType:'roof'} };
+        const recipes = { /* ... recipe definitions ... */ 'planks':{name:"Wooden Planks",requires:{wood:1},produces:4},'workbench':{name:"Workbench",requires:{planks:4},produces:1},'torch':{name:"Torch",requires:{wood:1,leaves:1},produces:2},'foundation':{name:"Foundation",requires:{stone:4},produces:1},'wall':{name:"Wall",requires:{stone:2},produces:1},'wall_window':{name:"Wall (Window)",requires:{stone:2},produces:1},'wall_door':{name:"Wall (Doorway)",requires:{stone:2},produces:1},'door':{name:"Wooden Door",requires:{planks:3},produces:1},'roof':{name:"Roof Section",requires:{stone:1,planks:1},produces:1} };
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2(0, 0);
+
+        // --- Initialization ---
+        // Wrap initialization in a function to ensure THREE is ready
+        function runGame() {
+            if (DEBUG) console.log("runGame() called");
+            try {
+                 init();
+                 animate();
+                 if (DEBUG) console.log("Game initialized and animation loop started.");
+            } catch (error) {
+                 console.error("Error during game initialization:", error);
+                 document.getElementById('loading-error').textContent = "Error initializing game. Check console (F12).";
+                 // Ensure blocker stays visible if init fails
+                 document.getElementById('blocker').style.display = 'block';
+                 document.getElementById('instructions').style.display = 'flex'; // Or use ''
+            }
+        }
+
+        // Function to check if THREE is loaded, then run the game
+        function checkThreeAndRun() {
+            if (typeof THREE !== 'undefined') {
+                if (DEBUG) console.log("THREE object found.");
+                 // Add a small delay to ensure the DOM is fully ready, just in case
+                setTimeout(runGame, 50);
+            } else {
+                console.error("Three.js core library failed to load. Cannot run game.");
+                 document.getElementById('loading-error').textContent = "Failed to load Three.js library from CDN.";
+                 // Hide the 'click to play' part if THREE fails fundamentally
+                 document.getElementById('instructions').innerHTML = '<p style="font-size: 18px; color: red;">Error: Could not load Three.js library.</p>';
+            }
+        }
+
+        // Start the process after the page loads
+        window.addEventListener('load', checkThreeAndRun);
+
+
+        function init() {
+            if (DEBUG) console.log("init() started");
+            // --- Basic Scene Setup ---
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color( 0x87CEEB );
+            scene.fog = new THREE.Fog( 0x87CEEB, 50, worldScale * 0.85 );
+
+            camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.1, 1000 );
+            camera.position.y = playerHeight;
+
+            renderer = new THREE.WebGLRenderer( { antialias: true } );
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild( renderer.domElement );
+
+            // --- Lights ---
+            const ambientLight = new THREE.AmbientLight( 0xcccccc, 0.6 );
+            scene.add( ambientLight );
+            const directionalLight = new THREE.DirectionalLight( 0xffffff, 0.6 );
+            directionalLight.position.set( 75, 150, 100 );
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            const shadowCamSize = worldScale * 0.6;
+            directionalLight.shadow.camera.left = -shadowCamSize; directionalLight.shadow.camera.right = shadowCamSize;
+            directionalLight.shadow.camera.top = shadowCamSize; directionalLight.shadow.camera.bottom = -shadowCamSize;
+            scene.add( directionalLight );
+
+             // --- Pre-process Items (Materials, Size) ---
+             if (DEBUG) console.log("Processing item definitions...");
+             for (const id in items) {
+                if (!items[id].geometry) {
+                    console.warn(`Item '${id}' has no geometry defined.`);
+                    continue; // Skip items without geometry
+                }
+                items[id].material = new THREE.MeshStandardMaterial({
+                    color: items[id].color,
+                    roughness: items[id].buildType ? 0.9 : 0.7,
+                    metalness: 0.1,
+                });
+                items[id].geometry.computeBoundingBox();
+                items[id].size = new THREE.Vector3();
+                items[id].geometry.boundingBox.getSize(items[id].size);
+                items[id].id = id;
+             }
+             if (DEBUG) console.log("Item definitions processed.");
+
+
+            // --- Controls ---
+            if (DEBUG) console.log("Setting up controls...");
+            setupControls(); // Call setupControls here
+
+            // --- World Generation ---
+            if (DEBUG) console.log("Creating initial world...");
+            createInitialWorld();
+
+            // --- Game Systems Init ---
+             if (DEBUG) console.log("Initializing game systems (inventory, UI)...");
+            initializeInventory();
+            updateInventoryUI();
+            updateToolbarUI();
+            updateCraftingUI();
+
+            // --- Placement Indicator ---
+             if (DEBUG) console.log("Setting up build indicator...");
+            setupBuildIndicator();
+
+
+            // --- Event Listeners ---
+             if (DEBUG) console.log("Adding event listeners...");
+            window.addEventListener( 'resize', onWindowResize );
+            document.addEventListener( 'pointerdown', onPointerDown );
+            document.addEventListener( 'keydown', onKeyDown );
+            document.addEventListener( 'keyup', onKeyUp );
+
+             if (DEBUG) console.log("init() finished successfully.");
+        }
+
+        function setupControls() {
+             // Check if PointerLockControls constructor exists (it should now be global)
+             if (typeof THREE.PointerLockControls === 'undefined') {
+                 console.error("THREE.PointerLockControls is not defined! Check the embedded script.");
+                 document.getElementById('loading-error').textContent = "Error: PointerLockControls script failed.";
+                 return; // Stop if controls are missing
+             }
+
+             try {
+                controls = new THREE.PointerLockControls( camera, document.body );
+             } catch (e) {
+                 console.error("Failed to instantiate PointerLockControls:", e);
+                 document.getElementById('loading-error').textContent = "Error creating PointerLockControls.";
+                 return;
+             }
+
+
+             const blocker = document.getElementById( 'blocker' );
+             const instructions = document.getElementById( 'instructions' );
+
+             if (!blocker || !instructions) {
+                console.error("Blocker or Instructions element not found in HTML!");
+                return;
+             }
+
+             // Clear previous listeners if any (robustness)
+             const newInstructions = instructions.cloneNode(true);
+             instructions.parentNode.replaceChild(newInstructions, instructions);
+
+
+             newInstructions.addEventListener( 'click', () => {
+                 if (DEBUG) console.log("Instructions clicked!");
+                 if (controls) {
+                    if (DEBUG) console.log("Calling controls.lock()...");
+                    try {
+                         controls.lock();
+                    } catch(e) {
+                         console.error("Error calling controls.lock():", e);
+                    }
+                 } else {
+                    console.error("Attempted to lock controls, but 'controls' is not defined.");
+                 }
+             });
+
+             if (controls) {
+                 controls.addEventListener( 'lock', () => {
+                    if (DEBUG) console.log("PointerLockControls: lock event triggered.");
+                    newInstructions.style.display = 'none';
+                    blocker.style.display = 'none';
+                    document.getElementById('crafting-ui').style.display = 'none';
+                 } );
+
+                 controls.addEventListener( 'unlock', () => {
+                     if (DEBUG) console.log("PointerLockControls: unlock event triggered.");
+                    blocker.style.display = 'block';
+                    newInstructions.style.display = 'flex'; // Use flex to re-center
+                 } );
+
+                scene.add( controls.getObject() );
+                 if (DEBUG) console.log("PointerLockControls setup complete.");
+             } else {
+                 if (DEBUG) console.log("Controls object not created, cannot add listeners or add to scene.");
+             }
+        }
+
+        // --- Rest of your game functions (createInitialWorld, createFeatures, createTree, createRock,
+        // --- initializeInventory, addToInventory, removeFromInventory, hasEnoughItems, craftItem,
+        // --- setupBuildIndicator, updateBuildIndicator, calculateSnappedPosition, placeSelectedItem,
+        // --- updateInventoryUI, updateToolbarUI, updateCraftingUI, toggleCraftingMenu,
+        // --- onWindowResize, onPointerDown, onKeyDown, onKeyUp, animate)
+        // --- PASTE ALL THOSE FUNCTIONS HERE ---
+        function createInitialWorld(){const e=new THREE.PlaneGeometry(worldScale,worldScale,50,50);e.rotateX(-Math.PI/2);const o=new THREE.MeshStandardMaterial({color:5597999,roughness:1,metalness:0});const t=new THREE.Mesh(e,o);t.receiveShadow=!0,t.name="ground",scene.add(t),objects.push(t),createFeatures(createTree,20),createFeatures(createRock,30)}function createFeatures(e,o){for(let t=0;t<o;t++){const o=e(),a=worldScale*.48;o.position.x=(Math.random()-.5)*a*2,o.position.z=(Math.random()-.5)*a*2,o.rotation.y=Math.random()*Math.PI*2,o.castShadow=!0,o.receiveShadow=!0,scene.add(o),objects.push(o)}}function createTree(){const e=new THREE.Group,o=items.wood.material,t=items.leaves.material,a=new THREE.Mesh(new THREE.CylinderGeometry(.3,.4,4,8),o);a.position.y=2,a.castShadow=!0;const r=new THREE.Mesh(new THREE.SphereGeometry(1.5,8,6),t);return r.position.y=4.5,r.castShadow=!0,e.add(a),e.add(r),e.position.y=0,e}function createRock(){const e=items.stone.material,o=.5+1.5*Math.random(),t=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0),e);return t.scale.set(o,o*(.8+.4*Math.random()),o),t.position.y=.5*o*1,t.castShadow=!0,t}function initializeInventory(){Object.assign(inventory,STARTING_INVENTORY)}function addToInventory(e,o=1){items[e]&&(inventory[e]=(inventory[e]||0)+o,updateInventoryUI(),updateToolbarUI(),updateCraftingUI())}function removeFromInventory(e,o=1){return!inventory[e]||inventory[e]<o?!1:(inventory[e]-=o,inventory[e]<=0&&delete inventory[e],updateInventoryUI(),updateToolbarUI(),updateCraftingUI(),!0)}function hasEnoughItems(e){for(const o in e)if(!inventory[o]||inventory[o]<e[o])return!1;return!0}function craftItem(e){if(!recipes[e])return;const o=recipes[e];if(hasEnoughItems(o.requires)){for(const t in o.requires)if(!removeFromInventory(t,o.requires[t]))return void console.error("Inventory inconsistency!");addToInventory(e,o.produces),console.log(`Crafted ${o.produces}x ${items[e].name}`)}else console.log("Not enough resources")}function setupBuildIndicator(){const e=new THREE.BoxGeometry(PLACEMENT_GRID_SIZE,PLACEMENT_GRID_SIZE,PLACEMENT_GRID_SIZE),o=new THREE.MeshBasicMaterial({color:16777215,wireframe:!0,transparent:!0,opacity:.5});buildIndicatorMesh=new THREE.Mesh(e,o),buildIndicatorMesh.visible=!1,scene.add(buildIndicatorMesh)}function updateBuildIndicator(e){if(!e||!controls.isLocked||!toolbarItems[selectedToolbarIndex]){return void(buildIndicatorMesh&&!buildIndicatorMesh.visible||(buildIndicatorMesh.visible=!1));}const o=toolbarItems[selectedToolbarIndex],t=items[o];if(!t||!t.placeable)return void(buildIndicatorMesh&&(buildIndicatorMesh.visible=!1));const a=calculateSnappedPosition(e,t);if(!a)return void(buildIndicatorMesh&&(buildIndicatorMesh.visible=!1));if(buildIndicatorMesh.geometry!==t.geometry&&(buildIndicatorMesh.geometry.dispose(),buildIndicatorMesh.geometry=t.geometry),buildIndicatorMesh.position.copy(a),buildIndicatorMesh.visible=!0,"wall"===t.buildType||"door"===t.buildType){const e=new THREE.Vector3;camera.getWorldDirection(e),e.y=0,e.normalize(),buildIndicatorMesh.rotation.y=Math.abs(e.x)>Math.abs(e.z)?Math.PI/2:0}else buildIndicatorMesh.rotation.y=0}function calculateSnappedPosition(e,o){if(!e||!o)return null;const t=e.face.normal.clone(),a=e.point.clone(),r=o.size,l="foundation"===o.buildType||"wall"===o.buildType||"roof"===o.buildType?PLACEMENT_GRID_SIZE:1,n="foundation"===o.buildType||"wall"===o.buildType||"roof"===o.buildType?r.y/2:r.y/2+.01,s=a.add(t.multiplyScalar(.01));let i=Math.round(s.x/l)*l,d=Math.round(s.z/l)*l,c=e.point.y+n;return"foundation"===o.buildType?(c=Math.round(e.point.y/foundationH)*foundationH+foundationH/2+.01,"ground"===e.object.name&&(c=foundationH/2+.01)):"wall"!==o.buildType&&"roof"!==o.buildType&&"door"!==o.buildType||(c=e.point.y+r.y/2+.01,e.object.name.startsWith("placed_")&&(i=Math.round(e.object.position.x/l)*l,d=Math.round(e.object.position.z/l)*l)),new THREE.Vector3(i,c,d)}function placeSelectedItem(){const e=toolbarItems[selectedToolbarIndex];if(!e||!items[e]||!items[e].placeable)return void console.log("No placeable item selected.");raycaster.setFromCamera(pointer,camera);const o=objects.filter(e=>"ground"===e.name).concat(placedObjects),t=raycaster.intersectObjects(o,!1);if(t.length>0){const o=t[0];if(o.distance>PLACEMENT_REACH)return void console.log("Too far to place item.");const a=items[e],r=calculateSnappedPosition(o,a);if(!r)return void console.log("Cannot determine placement position.");if(removeFromInventory(e,1)){const t=new THREE.Mesh(a.geometry,a.material);t.position.copy(r),buildIndicatorMesh&&buildIndicatorMesh.visible&&t.rotation.copy(buildIndicatorMesh.rotation),t.castShadow=!0,t.receiveShadow=!0,t.name=`placed_${e}_${Date.now()}`,scene.add(t),placedObjects.push(t),a.light&&function(){const e=new THREE.PointLight(16764074,.7,12);e.position.set(0,.4,0),e.castShadow=!1,t.add(e)}(),console.log(`Placed ${a.name}`)}else console.log(`No ${items[e].name} in inventory.`)}else console.log("No suitable surface in reach.")}function updateInventoryUI(){const e=document.getElementById("inventory-list");e.innerHTML="";let o=!0;for(const t in inventory){const a=inventory[t],r=items[t];a>0&&r&&(function(){const t=document.createElement("div");t.textContent=`${r.name}: ${a}`,e.appendChild(t)}(),o=!1)}o&&(e.textContent="Empty")}function updateToolbarUI(){const e=document.getElementById("toolbar-ui");e.innerHTML="",toolbarItems.length=0;const o=Object.keys(inventory).filter(e=>items[e]&&items[e].placeable&&inventory[e]>0).sort().slice(0,MAX_TOOLBAR_SLOTS);for(let t=0;t<MAX_TOOLBAR_SLOTS;t++){const a=o[t],r=document.createElement("div");r.classList.add("toolbar-slot"),r.dataset.index=t,a?(function(){const e=items[a];r.textContent=e.name.substring(0,3).toUpperCase(),r.title=`${e.name}\n(${inventory[a]})`,toolbarItems[t]=a;const o=document.createElement("span");o.classList.add("count"),o.textContent=inventory[a],r.appendChild(o)}()):toolbarItems[t]=null,t===selectedToolbarIndex&&r.classList.add("selected"),r.addEventListener("click",()=>{selectedToolbarIndex=t,updateToolbarUI()}),e.appendChild(r)}}function updateCraftingUI(){const e=document.getElementById("crafting-list");e.innerHTML="";let o=!1;for(const t in recipes){const a=recipes[t],r=items[t];if(!r)continue;const l=hasEnoughItems(a.requires),n=document.createElement("div");n.classList.add("crafting-recipe");let s=Object.entries(a.requires).map(([e,o])=>{var t;return`${o}x ${null!==(t=items[e])&&void 0!==t?t.name:e}`}).join(", ");n.innerHTML=`<span>${a.produces}x <b>${a.name}</b><br/><small>Req: ${s}</small></span>`;const i=document.createElement("button");i.textContent="Craft",i.disabled=!l,i.onclick=()=>craftItem(t),n.appendChild(i),e.appendChild(n),o=!0}o||(e.textContent="No recipes available.")}function toggleCraftingMenu(){const e=document.getElementById("crafting-ui"),o="block"===e.style.display;o?(e.style.display="none",controls&&!controls.isLocked&&controls.lock()):(e.style.display="block",updateCraftingUI(),controls&&controls.unlock())}function onWindowResize(){camera.aspect=window.innerWidth/window.innerHeight,camera.updateProjectionMatrix(),renderer.setSize(window.innerWidth,window.innerHeight)}function onPointerDown(e){controls&&controls.isLocked===!0&&2===e.button&&placeSelectedItem()}function onKeyDown(e){if("KeyC"===e.code)return void toggleCraftingMenu();if(e.code.startsWith("Digit")&&"Digit0"!==e.code){const o=parseInt(e.code.slice(5))-1;if(o>=0&&o<MAX_TOOLBAR_SLOTS)return selectedToolbarIndex=o,void updateToolbarUI()}const o="block"===document.getElementById("crafting-ui").style.display;if(controls&&controls.isLocked||!o)switch(e.code){case"ArrowUp":case"KeyW":moveForward=!0;break;case"ArrowLeft":case"KeyA":moveLeft=!0;break;case"ArrowDown":case"KeyS":moveBackward=!0;break;case"ArrowRight":case"KeyD":moveRight=!0;break;case"Space":canJump===!0&&(velocity.y+=250),canJump=!1}}function onKeyUp(e){switch(e.code){case"ArrowUp":case"KeyW":moveForward=!1;break;case"ArrowLeft":case"KeyA":moveLeft=!1;break;case"ArrowDown":case"KeyS":moveBackward=!1;break;case"ArrowRight":case"KeyD":moveRight=!1}}function animate(){requestAnimationFrame(animate);const e=performance.now(),o=(e-prevTime)/1e3;let t=null;if(controls&&controls.isLocked===!0){velocity.x-=velocity.x*10*o,velocity.z-=velocity.z*10*o,velocity.y-=9.8*100*o,direction.z=Number(moveForward)-Number(moveBackward),direction.x=Number(moveRight)-Number(moveLeft),direction.normalize(),(moveForward||moveBackward)&&(velocity.z-=direction.z*400*o),(moveLeft||moveRight)&&(velocity.x-=direction.x*400*o),controls.moveRight(-velocity.x*o),controls.moveForward(-velocity.z*o),controls.getObject().position.y+=velocity.y*o,controls.getObject().position.y<playerHeight&&(velocity.y=0,controls.getObject().position.y=playerHeight,canJump=!0),raycaster.setFromCamera(pointer,camera);const a=objects.filter(e=>"ground"===e.name).concat(placedObjects),r=raycaster.intersectObjects(a,!1);r.length>0&&r[0].distance<=PLACEMENT_REACH&&(t=r[0])}updateBuildIndicator(t),prevTime=e,renderer.render(scene,camera)}
+
+
+        // --- Final Load Checks --- (Keep these simple)
+        // Check done via checkThreeAndRun
+
+    </script>
+</body>
+</html>

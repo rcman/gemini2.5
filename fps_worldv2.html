@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js HTTP Survival Craft</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; /* Sky blue */ font-family: sans-serif; }
+        canvas { display: block; }
+        #blocker { position: absolute; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        #instructions { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; font-size: 14px; cursor: pointer; color: white; }
+
+        /* UI Styles */
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            font-size: 12px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #inventory-ui { bottom: 50px; left: 10px; min-width: 150px; }
+        #crafting-ui { top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; /* Hidden by default */ min-width: 250px; z-index: 10; }
+        #toolbar-ui {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #555;
+            border-radius: 3px;
+        }
+        .toolbar-slot {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #777;
+            margin: 2px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 10px;
+            position: relative;
+            cursor: pointer;
+            background-color: rgba(255, 255, 255, 0.1);
+            overflow: hidden; /* Hide long names */
+            white-space: nowrap; /* Prevent wrapping */
+            text-overflow: ellipsis; /* Add ... for overflow */
+        }
+        .toolbar-slot.selected { border: 2px solid yellow; }
+        .toolbar-slot .count { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: rgba(0,0,0,0.7); padding: 1px 2px; border-radius: 2px;}
+        .crafting-recipe button { margin-left: 10px; }
+        .crafting-recipe { margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #444;}
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background-color: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* Don't interfere with clicks */
+            mix-blend-mode: difference; /* Make it visible on most backgrounds */
+             z-index: 5;
+        }
+         h4 { margin-top: 0; margin-bottom: 8px; border-bottom: 1px solid #666; padding-bottom: 4px; }
+
+    </style>
+</head>
+<body>
+
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size: 36px">Click to play</p>
+            <p>
+                Move: WASD | Jump: SPACE | Look: MOUSE<br/>
+                Open/Close Crafting: C | Place Selected Item: Right-Click<br/>
+                Select Toolbar Slot: 1-9
+            </p>
+        </div>
+    </div>
+
+    <div id="crosshair">+</div> <!-- Simple crosshair -->
+
+    <!-- UI Elements -->
+    <div id="inventory-ui" class="ui-panel">
+        <h4>Inventory</h4>
+        <div id="inventory-list"></div>
+    </div>
+
+    <div id="crafting-ui" class="ui-panel">
+        <h4>Crafting</h4>
+        <div id="crafting-list"></div>
+        <button onclick="toggleCraftingMenu()" style="margin-top: 10px;">Close [C]</button>
+    </div>
+
+    <div id="toolbar-ui">
+        <!-- Toolbar slots will be generated here -->
+    </div>
+
+
+    <!-- Load Three.js core library from HTTP CDN -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Load PointerLockControls from an HTTP CDN -->
+    <script src="http://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
+
+    <script>
+        let camera, scene, renderer, controls;
+        const objects = []; // For non-interactive initial objects
+        const placedObjects = []; // For potentially interactive placed objects
+
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const worldScale = 200;
+
+        // --- Game State ---
+        const inventory = {}; // Item ID -> count mapping
+        let selectedToolbarIndex = 0;
+        const toolbarItems = []; // Array of item IDs visible in the toolbar
+
+        // --- Configuration ---
+        const STARTING_INVENTORY = { // <<< CHANGE STARTING ITEMS HERE
+            'wood': 50,
+            'stone': 30,
+            'leaves': 10
+        };
+        const MAX_TOOLBAR_SLOTS = 9;
+
+        // --- Item Definitions ---
+        const items = {
+            'wood':     { name: 'Wood', placeable: true, color: 0x8B4513, geometry: new THREE.BoxGeometry(1, 1, 2) }, // Log shape
+            'stone':    { name: 'Stone', placeable: true, color: 0x808080, geometry: new THREE.BoxGeometry(0.8, 0.8, 0.8) }, // Cube
+            'leaves':   { name: 'Leaves', placeable: true, color: 0x228B22, geometry: new THREE.BoxGeometry(1.5, 0.3, 1.5) }, // Flatish
+            'planks':   { name: 'Planks', placeable: true, color: 0xDEB887, geometry: new THREE.BoxGeometry(0.2, 1, 2) }, // Plank shape
+            'workbench':{ name: 'Workbench', placeable: true, color: 0xCD853F, geometry: new THREE.BoxGeometry(2, 1, 1) },
+            'torch':    { name: 'Torch', placeable: true, color: 0xFFD700, geometry: new THREE.CylinderGeometry(0.1, 0.1, 1, 8), light: true } // Basic torch
+            // Add more items as needed
+        };
+        // Create materials based on colors (or use textures later)
+        for (const id in items) {
+            items[id].material = new THREE.MeshStandardMaterial({
+                 color: items[id].color,
+                 roughness: 0.8,
+                 metalness: 0.1,
+                 // map: texture // Add textures later if desired
+            });
+            items[id].id = id; // Add id to the item object for easier reference
+        }
+
+        // --- Crafting Recipes ---
+        const recipes = {
+            // outputId: { name: "Display Name", requires: { inputId1: count1, inputId2: count2 }, produces: quantity }
+            'planks':    { name: "Wooden Planks", requires: { 'wood': 1 }, produces: 4 },
+            'workbench': { name: "Workbench", requires: { 'planks': 4 }, produces: 1 },
+            'torch':     { name: "Torch", requires: { 'wood': 1, 'leaves': 1 }, produces: 2 } // Example recipe
+             // Add more recipes... Needs a workbench proximity check for advanced recipes eventually
+        };
+
+        // --- Raycasting ---
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2(); // Use pointer instead of mouse for consistency
+
+        // --- Initialization ---
+        init();
+        animate();
+
+        function init() {
+            // --- Basic Scene Setup (Camera, Scene, Renderer, Lights) ---
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color( 0x87CEEB );
+            scene.fog = new THREE.Fog( 0x87CEEB, 0, worldScale * 0.75 );
+
+            camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+            camera.position.y = 10;
+
+            renderer = new THREE.WebGLRenderer( { antialias: true } );
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild( renderer.domElement );
+
+            const ambientLight = new THREE.AmbientLight( 0xcccccc, 0.5 );
+            scene.add( ambientLight );
+            const directionalLight = new THREE.DirectionalLight( 0xffffff, 0.7 );
+            directionalLight.position.set( 50, 150, 100 );
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            const shadowCamSize = worldScale * 0.7;
+            directionalLight.shadow.camera.left = -shadowCamSize;
+            directionalLight.shadow.camera.right = shadowCamSize;
+            directionalLight.shadow.camera.top = shadowCamSize;
+            directionalLight.shadow.camera.bottom = -shadowCamSize;
+            scene.add( directionalLight );
+
+            // --- Controls ---
+            setupControls();
+
+            // --- World Generation ---
+            createInitialWorld(); // Ground, trees, rocks etc.
+
+            // --- Game Systems Init ---
+            initializeInventory();
+            updateInventoryUI();
+            updateToolbarUI();
+            updateCraftingUI();
+
+            // --- Event Listeners ---
+            window.addEventListener( 'resize', onWindowResize );
+            document.addEventListener( 'pointerdown', onPointerDown ); // Use pointerdown for building click
+            document.addEventListener( 'keydown', onKeyDown );
+            document.addEventListener( 'keyup', onKeyUp );
+        }
+
+        function setupControls() {
+             if (typeof THREE.PointerLockControls === 'undefined') {
+                console.error("PointerLockControls failed to load. Check the HTTP CDN link.");
+                document.getElementById('instructions').innerHTML = '<p style="color: red;">Error: Could not load PointerLockControls. Controls will not work.</p>';
+                return; // Stop if controls can't load
+            }
+            controls = new THREE.PointerLockControls( camera, document.body );
+
+            const blocker = document.getElementById( 'blocker' );
+            const instructions = document.getElementById( 'instructions' );
+
+            instructions.addEventListener( 'click', () => controls.lock() );
+            controls.addEventListener( 'lock', () => {
+                instructions.style.display = 'none';
+                blocker.style.display = 'none';
+                // Close crafting menu when locking controls
+                 document.getElementById('crafting-ui').style.display = 'none';
+            } );
+            controls.addEventListener( 'unlock', () => {
+                blocker.style.display = 'block';
+                instructions.style.display = '';
+            } );
+
+            scene.add( controls.getObject() );
+        }
+
+        function createInitialWorld() {
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry( worldScale, worldScale, 50, 50 );
+            groundGeometry.rotateX( - Math.PI / 2 );
+            const groundMaterial = new THREE.MeshStandardMaterial( { color: 0x556B2F, roughness: 1.0, metalness: 0.0 } );
+            const ground = new THREE.Mesh( groundGeometry, groundMaterial );
+            ground.receiveShadow = true;
+            ground.name = "ground"; // Useful for raycasting checks
+            scene.add( ground );
+            objects.push(ground); // Add ground for raycasting checks
+
+            // Add simple representations of initial world features (less detailed than before)
+             createFeatures(createTree, 30);
+             createFeatures(createRock, 50);
+             // Add more feature types if needed
+        }
+
+        // Helper for creating simple initial features
+        function createFeatures(creationFunc, count) {
+            for (let i = 0; i < count; i++) {
+                const feature = creationFunc();
+                 const radius = worldScale * 0.48;
+                 feature.position.x = (Math.random() - 0.5) * radius * 2;
+                 feature.position.z = (Math.random() - 0.5) * radius * 2;
+                 feature.rotation.y = Math.random() * Math.PI * 2;
+                 feature.castShadow = true;
+                 feature.receiveShadow = true;
+                 scene.add(feature);
+                 objects.push(feature); // Add for raycasting
+            }
+        }
+
+        function createTree() { // Very simplified tree
+            const group = new THREE.Group();
+            const trunkMat = items['wood'].material; // Reuse wood material
+            const leavesMat = items['leaves'].material; // Reuse leaves material
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 4, 8), trunkMat);
+            trunk.position.y = 2;
+            const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 6), leavesMat);
+            leaves.position.y = 4.5;
+            group.add(trunk);
+            group.add(leaves);
+            group.position.y = 0; // Base is on ground
+            return group;
+        }
+
+        function createRock() { // Very simplified rock
+             const rockMat = items['stone'].material; // Reuse stone material
+             const scale = 0.5 + Math.random() * 1.5;
+             const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), rockMat);
+             rock.scale.set(scale, scale * (0.8 + Math.random() * 0.4), scale);
+             rock.position.y = (scale * 1) * 0.5; // Approx radius = 1
+             return rock;
+        }
+
+
+        // --- Inventory & Crafting Logic ---
+
+        function initializeInventory() {
+            for (const itemId in STARTING_INVENTORY) {
+                addToInventory(itemId, STARTING_INVENTORY[itemId]);
+            }
+        }
+
+        function addToInventory(itemId, quantity = 1) {
+            if (!items[itemId]) {
+                console.warn(`Attempted to add unknown item: ${itemId}`);
+                return;
+            }
+            inventory[itemId] = (inventory[itemId] || 0) + quantity;
+            updateInventoryUI();
+            updateToolbarUI(); // Toolbar might show items now available
+            updateCraftingUI(); // Crafting might become possible
+        }
+
+        function removeFromInventory(itemId, quantity = 1) {
+            if (!inventory[itemId] || inventory[itemId] < quantity) {
+                return false; // Not enough items
+            }
+            inventory[itemId] -= quantity;
+            if (inventory[itemId] <= 0) {
+                delete inventory[itemId];
+                // If removed item was selected in toolbar, clear selection
+                if (toolbarItems[selectedToolbarIndex] === itemId) {
+                    // selectedToolbarIndex remains, but item is gone
+                }
+            }
+            updateInventoryUI();
+            updateToolbarUI(); // Toolbar counts need update
+            updateCraftingUI(); // Crafting might become impossible
+            return true;
+        }
+
+        function hasEnoughItems(requiredItems) {
+            for (const itemId in requiredItems) {
+                if (!inventory[itemId] || inventory[itemId] < requiredItems[itemId]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function craftItem(recipeId) {
+            if (!recipes[recipeId]) return;
+            const recipe = recipes[recipeId];
+
+            if (hasEnoughItems(recipe.requires)) {
+                // Consume ingredients
+                for (const itemId in recipe.requires) {
+                    if (!removeFromInventory(itemId, recipe.requires[itemId])) {
+                        // Should not happen if hasEnoughItems is correct, but good practice
+                        console.error("Inventory inconsistency during crafting!");
+                        // Attempt to roll back (difficult without transaction system)
+                        return;
+                    }
+                }
+                // Add crafted item
+                addToInventory(recipeId, recipe.produces);
+                console.log(`Crafted ${recipe.produces}x ${items[recipeId].name}`);
+            } else {
+                console.log("Not enough resources to craft", items[recipeId].name);
+                // Optionally show a message to the user
+            }
+        }
+
+        // --- Building Logic ---
+
+        function placeSelectedItem() {
+            const selectedItemId = toolbarItems[selectedToolbarIndex];
+            if (!selectedItemId || !items[selectedItemId] || !items[selectedItemId].placeable) {
+                console.log("No placeable item selected.");
+                return;
+            }
+
+            // Raycast to find placement location
+            raycaster.setFromCamera( pointer, camera ); // Pointer is always center (0,0) for FPS
+            const intersects = raycaster.intersectObjects( [...objects, ...placedObjects], false ); // Check against initial world + placed items
+
+            if ( intersects.length > 0 ) {
+                const intersect = intersects[0];
+
+                // Prevent placing inside the player
+                if (intersect.distance < 1.5) {
+                     console.log("Too close to place item.");
+                     return;
+                }
+
+                // Check inventory *before* creating the mesh
+                if (removeFromInventory(selectedItemId, 1)) {
+                    const itemData = items[selectedItemId];
+                    const newMesh = new THREE.Mesh(itemData.geometry.clone(), itemData.material.clone()); // Clone!
+
+                    // Calculate position: Place on the surface normal
+                    const placementOffset = 0.01; // Small offset to prevent z-fighting
+                    const itemSizeVec = new THREE.Vector3();
+                    newMesh.geometry.computeBoundingBox(); // Ensure bounding box is calculated
+                    newMesh.geometry.boundingBox.getSize(itemSizeVec); // Get size
+
+                    // Position centered on the intersection point, offset slightly by normal, and raise half its height
+                    const halfHeightOffset = new THREE.Vector3(0, itemSizeVec.y / 2, 0); // Adjust if geometry isn't centered at origin
+                    const normalOffset = intersect.face.normal.clone().multiplyScalar(placementOffset + itemSizeVec.y / 2); // Adjust offset based on size
+
+                    // Simpler placement: just offset by normal slightly
+                    const placePoint = intersect.point.clone().add( intersect.face.normal.clone().multiplyScalar(0.01) );
+
+
+                    // Align to surface normal (optional, can look weird for some items)
+                     const alignmentQuaternion = new THREE.Quaternion().setFromUnitVectors( new THREE.Vector3(0, 1, 0), intersect.face.normal );
+                     // newMesh.quaternion.copy(alignmentQuaternion); // Apply alignment
+
+                     // Position based on intersection point + half size along normal
+                    const sizeOffset = intersect.face.normal.clone().multiplyScalar(itemSizeVec.length() * 0.5); // Crude size offset
+
+                    newMesh.position.copy(intersect.point).add(intersect.face.normal.clone().multiplyScalar(0.01)); // Place slightly above surface
+                    // Try to align the base of the object to the surface - more complex, skip for now
+
+
+                     // Simple grid snapping (optional)
+                    const gridSize = 1; // Snap to 1 unit grid
+                    newMesh.position.x = Math.round(newMesh.position.x / gridSize) * gridSize;
+                    newMesh.position.y = Math.round(newMesh.position.y / gridSize) * gridSize; // Careful with Y snapping
+                    newMesh.position.z = Math.round(newMesh.position.z / gridSize) * gridSize;
+                    // Adjust Y based on geometry height after snapping X/Z
+                     newMesh.geometry.computeBoundingBox();
+                     newMesh.position.y = Math.max(intersect.point.y, (Math.round(newMesh.position.y / gridSize) * gridSize)) + newMesh.geometry.boundingBox.getSize(new THREE.Vector3()).y / 2 + 0.01;
+
+
+                    // Make sure object is not placed below ground after potential snapping
+                    newMesh.position.y = Math.max(newMesh.position.y, itemSizeVec.y / 2 + 0.01); // Ensure minimum height based on item size
+
+
+                    newMesh.castShadow = true;
+                    newMesh.receiveShadow = true;
+                    newMesh.name = `placed_${selectedItemId}_${Date.now()}`; // Unique name
+
+                    scene.add(newMesh);
+                    placedObjects.push(newMesh); // Add to list for future raycasting/interaction
+
+                    // If item was a light source (like a torch)
+                    if (itemData.light) {
+                        const pointLight = new THREE.PointLight(0xFFD700, 0.8, 10); // Color, Intensity, Distance
+                        pointLight.position.copy(newMesh.position).add(new THREE.Vector3(0, 0.5, 0)); // Position slightly above the mesh base
+                         pointLight.castShadow = false; // Shadows from many point lights = expensive
+                        newMesh.add(pointLight); // Attach light to the object
+                    }
+
+
+                    console.log(`Placed ${itemData.name}`);
+                } else {
+                    console.log(`No ${items[selectedItemId].name} in inventory.`);
+                }
+            }
+        }
+
+        // --- UI Update Functions ---
+
+        function updateInventoryUI() {
+            const listDiv = document.getElementById('inventory-list');
+            listDiv.innerHTML = ''; // Clear current list
+            for (const itemId in inventory) {
+                const count = inventory[itemId];
+                const itemData = items[itemId];
+                if (count > 0 && itemData) {
+                    const div = document.createElement('div');
+                    div.textContent = `${itemData.name}: ${count}`;
+                    listDiv.appendChild(div);
+                }
+            }
+             if (Object.keys(inventory).length === 0) {
+                 listDiv.textContent = 'Empty';
+             }
+        }
+
+        function updateToolbarUI() {
+            const toolbarDiv = document.getElementById('toolbar-ui');
+            toolbarDiv.innerHTML = ''; // Clear current slots
+            toolbarItems.length = 0; // Clear the mapping array
+
+            // Find placeable items in inventory
+            const placeableInInventory = Object.keys(inventory)
+                .filter(id => items[id] && items[id].placeable && inventory[id] > 0)
+                .slice(0, MAX_TOOLBAR_SLOTS); // Limit to toolbar size
+
+            for (let i = 0; i < MAX_TOOLBAR_SLOTS; i++) {
+                const itemId = placeableInInventory[i];
+                const slot = document.createElement('div');
+                slot.classList.add('toolbar-slot');
+                slot.dataset.index = i; // Store index
+
+                if (itemId) {
+                    const itemData = items[itemId];
+                    slot.textContent = itemData.name.substring(0,3); // Short name
+                    slot.title = itemData.name; // Full name on hover
+                    toolbarItems[i] = itemId; // Store mapping
+
+                    const countSpan = document.createElement('span');
+                    countSpan.classList.add('count');
+                    countSpan.textContent = inventory[itemId];
+                    slot.appendChild(countSpan);
+                } else {
+                    toolbarItems[i] = null; // Empty slot
+                }
+
+                if (i === selectedToolbarIndex) {
+                    slot.classList.add('selected');
+                }
+
+                slot.addEventListener('click', () => {
+                     selectedToolbarIndex = i;
+                     updateToolbarUI(); // Re-render to show selection change
+                });
+
+                toolbarDiv.appendChild(slot);
+            }
+        }
+
+
+        function updateCraftingUI() {
+            const listDiv = document.getElementById('crafting-list');
+            listDiv.innerHTML = ''; // Clear
+
+            for (const recipeId in recipes) {
+                const recipe = recipes[recipeId];
+                const outputItem = items[recipeId];
+                if (!outputItem) continue; // Skip if item definition missing
+
+                const canCraft = hasEnoughItems(recipe.requires);
+
+                const div = document.createElement('div');
+                div.classList.add('crafting-recipe');
+
+                let reqText = Object.entries(recipe.requires)
+                                  .map(([reqId, count]) => `${count}x ${items[reqId]?.name || reqId}`)
+                                  .join(', ');
+
+                div.innerHTML = `<span>Craft ${recipe.produces}x <b>${recipe.name}</b> (Req: ${reqText})</span>`;
+
+                const button = document.createElement('button');
+                button.textContent = 'Craft';
+                button.disabled = !canCraft;
+                button.onclick = () => craftItem(recipeId); // Pass recipeId
+
+                div.appendChild(button);
+                listDiv.appendChild(div);
+            }
+             if (Object.keys(recipes).length === 0) {
+                 listDiv.textContent = 'No recipes available.';
+             }
+        }
+
+        function toggleCraftingMenu() {
+            const menu = document.getElementById('crafting-ui');
+            const currentlyVisible = menu.style.display === 'block';
+            if (currentlyVisible) {
+                menu.style.display = 'none';
+                // Attempt to lock controls again if they were unlocked by opening the menu
+                 if (controls && !controls.isLocked) controls.lock();
+            } else {
+                menu.style.display = 'block';
+                updateCraftingUI(); // Refresh availability when opening
+                 // Unlock controls to interact with the menu
+                 if (controls) controls.unlock();
+            }
+        }
+
+        // --- Event Handlers ---
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize( window.innerWidth, window.innerHeight );
+        }
+
+        function onPointerDown( event ) {
+            // Use button === 2 for right-click
+            if ( controls && controls.isLocked === true && event.button === 2 ) {
+                 pointer.set(0, 0); // Set pointer to center for raycasting from camera center
+                 placeSelectedItem();
+            }
+             // Left click (button === 0) is handled by PointerLockControls for locking
+        }
+
+        function onKeyDown ( event ) {
+            if (event.code === 'KeyC') {
+                toggleCraftingMenu();
+                 // Prevent player movement while menu open (handled by controls.unlock)
+                return; // Don't process movement keys if opening/closing menu
+            }
+
+            // Handle toolbar selection (1-9 keys)
+            if (event.code.startsWith('Digit') && event.code !== 'Digit0') {
+                 const index = parseInt(event.code.slice(5)) - 1; // Digit1 -> 0, Digit9 -> 8
+                 if (index >= 0 && index < MAX_TOOLBAR_SLOTS) {
+                     selectedToolbarIndex = index;
+                     updateToolbarUI();
+                     return; // Don't process other keys if selecting toolbar
+                 }
+            }
+
+
+             // Only process movement if controls are locked OR if crafting menu isn't open
+             const craftingOpen = document.getElementById('crafting-ui').style.display === 'block';
+             if (controls && controls.isLocked || !craftingOpen) {
+                 switch ( event.code ) {
+                    case 'ArrowUp': case 'KeyW': moveForward = true; break;
+                    case 'ArrowLeft': case 'KeyA': moveLeft = true; break;
+                    case 'ArrowDown': case 'KeyS': moveBackward = true; break;
+                    case 'ArrowRight': case 'KeyD': moveRight = true; break;
+                    case 'Space': if ( canJump === true ) velocity.y += 250; canJump = false; break;
+                 }
+             }
+        };
+
+        function onKeyUp ( event ) {
+             // Always allow stopping movement, regardless of lock state
+             switch ( event.code ) {
+                case 'ArrowUp': case 'KeyW': moveForward = false; break;
+                case 'ArrowLeft': case 'KeyA': moveLeft = false; break;
+                case 'ArrowDown': case 'KeyS': moveBackward = false; break;
+                case 'ArrowRight': case 'KeyD': moveRight = false; break;
+            }
+        };
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame( animate );
+            const time = performance.now();
+
+            if (controls && controls.isLocked === true ) {
+                const delta = ( time - prevTime ) / 1000;
+
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 100.0 * delta; // Gravity
+
+                direction.z = Number( moveForward ) - Number( moveBackward );
+                direction.x = Number( moveRight ) - Number( moveLeft );
+                direction.normalize(); // Consistent speed diagonally
+
+                if ( moveForward || moveBackward ) velocity.z -= direction.z * 400.0 * delta;
+                if ( moveLeft || moveRight ) velocity.x -= direction.x * 400.0 * delta;
+
+                controls.moveRight( - velocity.x * delta );
+                controls.moveForward( - velocity.z * delta );
+                controls.getObject().position.y += ( velocity.y * delta );
+
+                // Ground collision
+                if ( controls.getObject().position.y < 10 ) {
+                    velocity.y = 0;
+                    controls.getObject().position.y = 10;
+                    canJump = true;
+                }
+            }
+
+            prevTime = time;
+            renderer.render( scene, camera );
+        }
+
+        // Final check in case THREE failed entirely
+        if (typeof THREE === 'undefined') {
+            console.error("Three.js core library failed to load. Check the HTTP CDN link.");
+            document.body.innerHTML = '<p style="color: red; font-family: sans-serif;">Error: Could not load Three.js library. Cannot run example.</p>';
+            document.getElementById('blocker').style.display = 'none';
+            document.getElementById('inventory-ui').style.display = 'none';
+            document.getElementById('crafting-ui').style.display = 'none';
+            document.getElementById('toolbar-ui').style.display = 'none';
+             document.getElementById('crosshair').style.display = 'none';
+        } else if (typeof THREE.PointerLockControls === 'undefined') {
+            // Handle case where only controls failed but THREE loaded
+             document.getElementById('blocker').style.display = 'none'; // Show world but maybe disable UI that needs controls?
+             console.warn("Controls failed, some UI might not be fully functional.");
+        }
+
+    </script>
+</body>
+</html>

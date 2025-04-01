@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js HTTP Survival Craft (Modular - r128)</title>
+    <!-- Link to the external CSS file -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- UI Elements remain in HTML -->
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size: 36px">Click to play</p>
+            <p>
+                Move: WASD | Jump: SPACE | Look: MOUSE<br/>
+                Harvest/Attack: Left-Click | Place: Right-Click<br/>
+                Open/Close Crafting: C | Select Toolbar Slot: 1-9
+            </p>
+            <p id="loading-error" style="color: red; margin-top: 20px;"></p>
+            <p id="version-warning" style="color: orange; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <div id="crosshair">+</div>
+    <div id="action-feedback"></div>
+
+    <div id="inventory-ui" class="ui-panel"><h4>Inventory</h4><div id="inventory-list"></div></div>
+    <div id="crafting-ui" class="ui-panel"><h4>Crafting</h4><div id="crafting-list"></div><button id="close-crafting-btn" style="margin-top: 10px;">Close [C]</button></div>
+    <div id="toolbar-ui"></div>
+
+    <!-- Load Three.js core library (r128 - HTTP) -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Load PointerLockControls (for r128 - HTTP) -->
+    <script src="http://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
+
+    <!-- Load the main JavaScript module -->
+    <!-- IMPORTANT: type="module" tells the browser to treat this as an ES module -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

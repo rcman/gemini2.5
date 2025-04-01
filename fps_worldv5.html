@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js HTTP Survival Craft (Fixed Controls - r128 Attempt)</title>
+    <style>
+        /* CSS remains unchanged */
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; }
+        canvas { display: block; }
+        #blocker { position: absolute; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 20; }
+        #instructions { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; font-size: 14px; cursor: pointer; color: white; }
+        .ui-panel { position: absolute; background-color: rgba(0, 0, 0, 0.7); color: white; padding: 10px; border: 1px solid #555; border-radius: 5px; font-size: 12px; max-height: 80vh; overflow-y: auto; z-index: 10; }
+        #inventory-ui { bottom: 60px; left: 10px; min-width: 150px; }
+        #crafting-ui { top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; min-width: 300px; }
+        #toolbar-ui { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; background-color: rgba(0, 0, 0, 0.5); border: 1px solid #555; border-radius: 3px; z-index: 10;}
+        .toolbar-slot { width: 40px; height: 40px; border: 1px solid #777; margin: 2px; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; position: relative; cursor: pointer; background-color: rgba(255, 255, 255, 0.1); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .toolbar-slot.selected { border: 2px solid yellow; }
+        .toolbar-slot .count { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: rgba(0,0,0,0.7); padding: 1px 2px; border-radius: 2px;}
+        .crafting-recipe button { margin-left: 10px; padding: 2px 5px; cursor: pointer;}
+        .crafting-recipe button:disabled { cursor: default; opacity: 0.5; }
+        .crafting-recipe { margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center;}
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background-color: white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; mix-blend-mode: difference; z-index: 5; }
+        h4 { margin-top: 0; margin-bottom: 8px; border-bottom: 1px solid #666; padding-bottom: 4px; }
+        #build-indicator { /* Style removed - indicator is a THREE.Mesh */ }
+        #action-feedback { position: absolute; top: 60%; left: 50%; transform: translateX(-50%); color: yellow; background-color: rgba(0,0,0,0.5); padding: 3px 8px; border-radius: 3px; font-size: 12px; z-index: 15; pointer-events: none; display: none; text-align: center; }
+    </style>
+</head>
+<body>
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size: 36px">Click to play</p>
+            <p>
+                Move: WASD | Jump: SPACE | Look: MOUSE<br/>
+                Harvest/Attack: Left-Click | Place: Right-Click<br/>
+                Open/Close Crafting: C | Select Toolbar Slot: 1-9
+            </p>
+            <p id="loading-error" style="color: red; margin-top: 20px;"></p>
+             <p id="version-warning" style="color: orange; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <div id="crosshair">+</div>
+    <div id="action-feedback"></div>
+
+    <div id="inventory-ui" class="ui-panel"><h4>Inventory</h4><div id="inventory-list"></div></div>
+    <div id="crafting-ui" class="ui-panel"><h4>Crafting</h4><div id="crafting-list"></div><button onclick="toggleCraftingMenu()" style="margin-top: 10px;">Close [C]</button></div>
+    <div id="toolbar-ui"></div>
+
+    <!-- Load Three.js core library from HTTP CDN (r128) -->
+    <!-- Using HTTP as requested, less secure and potentially unreliable -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- Load PointerLockControls from an HTTP CDN (for r128) -->
+    <!-- This link might be unstable. Using HTTP as requested. -->
+    <script src="http://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
+
+
+    <script>
+        // Basic check if THREE loaded
+        if (typeof THREE === 'undefined') {
+            document.getElementById("loading-error").textContent = "FATAL ERROR: Three.js core library (r128) failed to load from HTTP CDN. Check network or try a different link.";
+            document.getElementById("blocker").style.display = 'block'; // Keep blocker visible
+            document.getElementById("instructions").style.display = 'flex';
+            throw new Error("Three.js r128 failed to load via HTTP");
+        } else {
+            // Check if PointerLockControls loaded (it attaches to THREE in r128)
+             if (typeof THREE.PointerLockControls === 'undefined') {
+                 document.getElementById("loading-error").textContent = "ERROR: PointerLockControls (for r128) failed to load from HTTP CDN. Controls will not work.";
+                 // Let the game try to load, but controls won't function
+             } else {
+                  document.getElementById("loading-error").textContent = ""; // Clear any previous loading error
+             }
+             // Add warning about version mismatch
+              document.getElementById("version-warning").textContent = "Warning: Using older Three.js (r128) via HTTP. Some features might not work as expected.";
+        }
+
+
+        const DEBUG = true;
+
+        let camera, scene, renderer, controls;
+        const objects = []; // Harvestable/interactable world objects (trees, rocks)
+        const placedObjects = []; // Objects placed by the player
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const worldScale = 200;
+        const playerHeight = 1.8;
+        const playerRadius = 0.5;
+        const inventory = {};
+        let selectedToolbarIndex = 0;
+        const toolbarItems = []; // Array mapping toolbar index to item ID
+        let buildIndicatorMesh = null; // The wireframe mesh showing placement preview
+        const raycaster = new THREE.Raycaster();
+        // NOTE: In r128, Raycaster might not have setFromCamera directly.
+        // We'll keep it for now, but might need adjustment if it fails.
+        const pointer = new THREE.Vector2(0, 0); // Center of the screen
+        let feedbackTimeout = null;
+
+        const STARTING_INVENTORY = { 'wood': 10, 'stone': 5, 'axe': 1, 'pickaxe': 1 };
+        const MAX_TOOLBAR_SLOTS = 9;
+        const PLACEMENT_GRID_SIZE = 2;
+        const PLACEMENT_REACH = 8;
+        const INTERACTION_REACH = 5;
+
+        const foundationW = PLACEMENT_GRID_SIZE * 2, foundationH = 0.5, foundationD = PLACEMENT_GRID_SIZE * 2;
+        const wallW = foundationW, wallH = 3, wallD = 0.3;
+        const doorW = 1.5, doorH = wallH * 0.9, doorD = 0.2;
+        const roofW = foundationW, roofH = 0.3, roofD = foundationD;
+
+        // --- Item Definitions ---
+        // NOTE: Geometries created here use the loaded r128 version of THREE
+        const items = {
+            'wood': { name: 'Wood', placeable: true, color: 0x8b4513, geometry: new THREE.BoxGeometry(1, 1, 2), buildType: 'resource' },
+            'stone': { name: 'Stone', placeable: true, color: 0x808080, geometry: new THREE.BoxGeometry(0.8, 0.8, 0.8), buildType: 'resource' },
+            'leaves': { name: 'Leaves', placeable: true, color: 0x228B22, geometry: new THREE.BoxGeometry(1.5, 0.3, 1.5), buildType: 'resource' },
+            'planks': { name: 'Planks', placeable: true, color: 0xdeb887, geometry: new THREE.BoxGeometry(0.2, 1, 2), buildType: 'material' },
+            'workbench': { name: 'Workbench', placeable: true, color: 0xcd853f, geometry: new THREE.BoxGeometry(2, 1, 1), buildType: 'utility' },
+            'torch': { name: 'Torch', placeable: true, color: 0xffff00, geometry: new THREE.CylinderGeometry(0.1, 0.1, 1, 8), light: true, buildType: 'utility' },
+            'foundation': { name: 'Foundation', placeable: true, color: 0x777777, geometry: new THREE.BoxGeometry(foundationW, foundationH, foundationD), buildType: 'foundation' },
+            'wall': { name: 'Wall', placeable: true, color: 0xaaaaaa, geometry: new THREE.BoxGeometry(wallW, wallH, wallD), buildType: 'wall' },
+            'wall_window': { name: 'Wall (Window)', placeable: true, color: 0xaaaaaa, geometry: new THREE.BoxGeometry(wallW, wallH, wallD), buildType: 'wall' },
+            'wall_door': { name: 'Wall (Door)', placeable: true, color: 0xaaaaaa, geometry: new THREE.BoxGeometry(wallW, wallH, wallD), buildType: 'wall' },
+            'door': { name: 'Door', placeable: true, color: 0x8b4513, geometry: new THREE.BoxGeometry(doorW, doorH, doorD), buildType: 'door' },
+            'roof': { name: 'Roof', placeable: true, color: 0x666666, geometry: new THREE.BoxGeometry(roofW, roofH, roofD), buildType: 'roof' },
+            'axe': { name: 'Axe', placeable: false, toolType: 'axe', color: 0xcccccc, geometry: new THREE.BoxGeometry(0.2, 1.5, 0.5) },
+            'pickaxe': { name: 'Pickaxe', placeable: false, toolType: 'pickaxe', color: 0xaaaaaa, geometry: new THREE.BoxGeometry(0.2, 1.5, 0.5) },
+            'knife': { name: 'Knife', placeable: false, toolType: 'knife', color: 0xbbbbbb, geometry: new THREE.BoxGeometry(0.1, 0.8, 0.2) }
+        };
+
+        // --- Crafting Recipes --- (Logic remains the same)
+        const recipes = {
+            'planks': { name: "Wooden Planks", requires: { wood: 1 }, produces: 4 },
+            'workbench': { name: "Workbench", requires: { planks: 4 }, produces: 1 },
+            'torch': { name: "Torch", requires: { wood: 1, leaves: 1 }, produces: 2 },
+            'foundation': { name: "Foundation", requires: { stone: 4 }, produces: 1 },
+            'wall': { name: "Wall", requires: { stone: 2 }, produces: 1 },
+            'wall_window': { name: "Wall (Window)", requires: { stone: 2 }, produces: 1 },
+            'wall_door': { name: "Wall (Doorway)", requires: { stone: 2 }, produces: 1 },
+            'door': { name: "Wooden Door", requires: { planks: 3 }, produces: 1 },
+            'roof': { name: "Roof Section", requires: { stone: 1, planks: 1 }, produces: 1 },
+        };
+
+        // --- Initialization ---
+        function init() {
+            if (DEBUG) console.log("init() started - Using THREE r128");
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 50, worldScale * 0.85);
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+            // Camera position set via controls later
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            // r128 might default to PCFShadowMap or require setting slightly differently
+             renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Keep trying PCFSoft
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xcccccc, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            directionalLight.position.set(75, 150, 100);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.set(1024, 1024); // Lower res might be safer with r128
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            const shadowCamSize = worldScale * 0.6;
+            directionalLight.shadow.camera.left = -shadowCamSize;
+            directionalLight.shadow.camera.right = shadowCamSize;
+            directionalLight.shadow.camera.top = shadowCamSize;
+            directionalLight.shadow.camera.bottom = -shadowCamSize;
+            scene.add(directionalLight);
+
+            // Pre-process item data
+            for (const id in items) {
+                const item = items[id];
+                // Material definition might need slight adjustments for r128 if issues arise
+                item.material = new THREE.MeshStandardMaterial({
+                    color: item.color,
+                    roughness: item.buildType ? 0.9 : 0.7,
+                    metalness: 0.1
+                });
+                if (item.geometry) {
+                    // Bounding box calculation should work similarly in r128
+                    item.geometry.computeBoundingBox();
+                    item.size = new THREE.Vector3();
+                    // Method might be slightly different? Check r128 docs if errors occur.
+                    // .getSize() on boundingBox should exist.
+                    item.geometry.boundingBox.getSize(item.size);
+                } else {
+                    console.warn(`Item ${id} has no geometry defined.`);
+                    item.size = new THREE.Vector3(1, 1, 1);
+                }
+                item.id = id;
+            }
+
+            createInitialWorld();
+            initializeInventory();
+            updateInventoryUI();
+            updateToolbarUI();
+            updateCraftingUI();
+            setupBuildIndicator();
+
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('pointerdown', onPointerDown);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            // Only setup controls if PointerLockControls loaded successfully
+             if (typeof THREE.PointerLockControls !== 'undefined') {
+                 setupControls();
+             } else {
+                 console.error("Cannot setup controls because PointerLockControls failed to load.");
+                 // Maybe hide the blocker permanently if controls are impossible
+                 // document.getElementById('blocker').style.display = 'none';
+             }
+
+            animate();
+        }
+
+        // --- Controls Setup ---
+        function setupControls() {
+             if (DEBUG) console.log("Setting up controls (r128)...");
+             // In r128, PointerLockControls takes camera and domElement
+             controls = new THREE.PointerLockControls(camera, document.body);
+
+             // Set initial position by directly manipulating the controls object's position (camera holder)
+             controls.getObject().position.set(0, playerHeight, 5);
+             scene.add(controls.getObject()); // Add camera holder to scene
+
+             const blocker = document.getElementById('blocker');
+             const instructions = document.getElementById('instructions');
+
+             instructions.addEventListener('click', () => {
+                 controls.lock();
+             });
+
+             controls.addEventListener('lock', () => {
+                 instructions.style.display = 'none';
+                 blocker.style.display = 'none';
+                 document.getElementById('crafting-ui').style.display = 'none';
+             });
+
+             controls.addEventListener('unlock', () => {
+                 blocker.style.display = 'block';
+                 instructions.style.display = 'flex';
+             });
+        }
+
+        // --- World Generation --- (Logic should be compatible)
+         function createInitialWorld() {
+            const groundGeo = new THREE.PlaneGeometry(worldScale, worldScale, 50, 50);
+            groundGeo.rotateX(-Math.PI / 2);
+            // MeshStandardMaterial is available in r128
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x556b2f, roughness: 1, metalness: 0 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.receiveShadow = true;
+            ground.name = "ground";
+            scene.add(ground);
+            // Don't add ground to `objects` unless it's harvestable
+
+            createFeatures(createTree, 30);
+            createFeatures(createRock, 40);
+        }
+
+        function createFeatures(factory, count) {
+            const range = worldScale * 0.48;
+            for (let i = 0; i < count; i++) {
+                const obj = factory();
+                if (!obj) continue;
+                obj.position.set(
+                    (Math.random() - 0.5) * range * 2,
+                     obj.position.y, // Keep the y position set by the factory
+                    (Math.random() - 0.5) * range * 2
+                );
+                obj.rotation.y = Math.random() * Math.PI * 2;
+                obj.castShadow = true;
+                obj.receiveShadow = true;
+                scene.add(obj);
+                objects.push(obj); // Add to harvestable objects list
+            }
+        }
+
+         function createTree() {
+             // Group, CylinderGeometry, SphereGeometry, MeshStandardMaterial should work in r128
+             const group = new THREE.Group();
+             const trunkHeight = 4 + Math.random() * 2;
+             const trunkRadius = 0.3 + Math.random() * 0.2;
+             const trunk = new THREE.Mesh(
+                 new THREE.CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight, 8),
+                 items.wood.material
+             );
+             trunk.position.y = trunkHeight / 2;
+             trunk.castShadow = true;
+             group.add(trunk);
+
+             const foliageRadius = 1.5 + Math.random();
+             const foliage = new THREE.Mesh(
+                 new THREE.SphereGeometry(foliageRadius, 8, 6),
+                 items.leaves.material
+             );
+             foliage.position.y = trunkHeight + foliageRadius * 0.5;
+             foliage.castShadow = true;
+             group.add(foliage);
+
+             // userData works the same
+             group.userData = {
+                 type: "tree",
+                 resource: "wood",
+                 secondaryResource: "leaves",
+                 yieldAmount: 3 + Math.floor(Math.random() * 3),
+                 secondaryYield: 1 + Math.floor(Math.random() * 2),
+                 tool: "axe"
+             };
+             group.name = "tree_group_" + Math.random().toString(16).substring(2, 8);
+             group.position.y = 0;
+             return group;
+         }
+
+         function createRock() {
+             // IcosahedronGeometry should work
+             const size = 0.8 + Math.random() * 1.2;
+             const rock = new THREE.Mesh(
+                 new THREE.IcosahedronGeometry(size, 0),
+                 items.stone.material
+             );
+             rock.scale.y = 0.6 + Math.random() * 0.4;
+             // Getting geometry parameters might differ if needed, but setting pos should work
+             rock.position.y = (size * rock.scale.y) / 2;
+             rock.castShadow = true;
+
+             rock.userData = {
+                 type: "rock",
+                 resource: "stone",
+                 yieldAmount: 2 + Math.floor(Math.random() * 3),
+                 tool: "pickaxe"
+             };
+             rock.name = "rock_object_" + Math.random().toString(16).substring(2, 8);
+             return rock;
+         }
+
+        // --- Inventory & Crafting Logic --- (Pure JS, no THREE dependencies)
+        function initializeInventory() { Object.assign(inventory, STARTING_INVENTORY); }
+        function addToInventory(item, amount = 1) {
+             if (!items[item]) { console.warn(`Attempted to add unknown item: ${item}`); return; }
+             inventory[item] = (inventory[item] || 0) + amount;
+             if (DEBUG) console.log(`Added ${amount}x ${item}, total: ${inventory[item]}`);
+             updateInventoryUI(); updateToolbarUI(); updateCraftingUI();
+         }
+        function removeFromInventory(item, amount = 1) {
+            if (!inventory[item] || inventory[item] < amount) return false;
+            inventory[item] -= amount;
+            if (inventory[item] <= 0) { delete inventory[item]; if (DEBUG) console.log(`Removed all ${item}`);}
+            else { if (DEBUG) console.log(`Removed ${amount}x ${item}, remaining: ${inventory[item]}`); }
+            updateInventoryUI(); updateToolbarUI(); updateCraftingUI();
+            return true;
+        }
+        function hasEnoughItems(requirements) { for (const item in requirements) { if (!inventory[item] || inventory[item] < requirements[item]) return false; } return true; }
+        function craftItem(itemId) {
+            const recipe = recipes[itemId]; const productItem = items[itemId];
+            if (!recipe || !productItem) { console.error(`Invalid item ID to craft: ${itemId}`); return; }
+            if (hasEnoughItems(recipe.requires)) {
+                for (const reqItem in recipe.requires) { if (!removeFromInventory(reqItem, recipe.requires[reqItem])) { console.error(`Crafting failed: Could not remove required item ${reqItem}`); showActionFeedback("Crafting error!"); return; } }
+                addToInventory(itemId, recipe.produces); showActionFeedback(`Crafted ${recipe.produces}x ${productItem.name}`);
+            } else { showActionFeedback("Not enough resources"); }
+        }
+
+        // --- Build Indicator & Placement Logic ---
+        function setupBuildIndicator() {
+             // MeshBasicMaterial should work
+             const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5, depthTest: false });
+             // BoxGeometry placeholder works
+             buildIndicatorMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+             buildIndicatorMesh.visible = false;
+             buildIndicatorMesh.renderOrder = 1; // Render order might exist in r128
+             scene.add(buildIndicatorMesh);
+         }
+
+        function updateBuildIndicator(intersection) {
+             // Logic depends heavily on Raycaster and intersection results
+             const selectedItemId = toolbarItems[selectedToolbarIndex];
+             const itemToBuild = items[selectedItemId];
+
+             // Visibility logic is fine
+             if (!controls || !controls.isLocked || !selectedItemId || !itemToBuild || !itemToBuild.placeable || !intersection || intersection.distance > PLACEMENT_REACH) {
+                 if (buildIndicatorMesh && buildIndicatorMesh.visible) buildIndicatorMesh.visible = false;
+                 return;
+             }
+             if (!buildIndicatorMesh) return; // Guard if setup failed
+
+             const pos = calculateSnappedPosition(intersection, itemToBuild);
+             if (!pos) { if (buildIndicatorMesh.visible) buildIndicatorMesh.visible = false; return; }
+
+             // Geometry swapping should work
+             if (buildIndicatorMesh.geometry !== itemToBuild.geometry) {
+                 // Dispose might not exist or work identically in r128, remove if errors
+                 if (buildIndicatorMesh.geometry.dispose) buildIndicatorMesh.geometry.dispose();
+                 buildIndicatorMesh.geometry = itemToBuild.geometry;
+             }
+
+             buildIndicatorMesh.position.copy(pos);
+
+             // Rotation logic depends on camera.getWorldDirection
+             // getWorldDirection should exist in r128 camera
+             if (itemToBuild.buildType === "wall" || itemToBuild.buildType === "door" || itemToBuild.buildType === "wall_window" || itemToBuild.buildType === "wall_door") {
+                  const lookDirection = new THREE.Vector3();
+                  camera.getWorldDirection(lookDirection);
+                  lookDirection.y = 0; lookDirection.normalize();
+                  buildIndicatorMesh.rotation.y = Math.abs(lookDirection.x) > Math.abs(lookDirection.z) ? Math.PI / 2 : 0;
+             } else {
+                  buildIndicatorMesh.rotation.set(0, 0, 0);
+             }
+
+             buildIndicatorMesh.visible = true;
+         }
+
+         function calculateSnappedPosition(intersection, item) {
+            // Core math is fine, relies on intersection data structure
+            // intersection.face and intersection.point should exist
+            if (!intersection || !item || !item.size || !intersection.face) return null; // Added face check
+
+            const normal = intersection.face.normal.clone();
+            const point = intersection.point.clone();
+            const size = item.size;
+            const grid = (item.buildType === "foundation" || item.buildType === "wall" || item.buildType === "roof" || item.buildType === "door" || item.buildType === "wall_window" || item.buildType === "wall_door") ? PLACEMENT_GRID_SIZE : 1;
+            const offsetDistance = 0.01;
+            const adjustedPoint = point.add(normal.multiplyScalar(offsetDistance));
+            let snapX = Math.round(adjustedPoint.x / grid) * grid;
+            let snapZ = Math.round(adjustedPoint.z / grid) * grid;
+            let snapY;
+            const targetObject = intersection.object;
+            const targetIsGround = targetObject.name === 'ground';
+            // Check if placedObjects array includes targetObject instance
+            const targetIsPlaced = placedObjects.includes(targetObject);
+
+            snapY = adjustedPoint.y + size.y / 2; // Default
+
+             // The rest of the specific Y adjustments:
+             // Use geometry.parameters if needed (check r128 docs if BoxGeometry stores them this way)
+             // The general logic should hold, but property access might differ subtly.
+            if (item.buildType === 'foundation') {
+                snapY = targetIsGround ? foundationH / 2 : Math.round(adjustedPoint.y / foundationH) * foundationH + foundationH / 2;
+             } else if (item.buildType === 'wall' || item.buildType === 'wall_window' || item.buildType === 'wall_door') {
+                 if (targetIsPlaced && targetObject.userData && targetObject.userData.buildType === 'foundation' && targetObject.geometry.parameters) {
+                     snapY = targetObject.position.y + targetObject.geometry.parameters.height / 2 + size.y / 2; // Assumes parameters.height exists
+                 } else { snapY = adjustedPoint.y + size.y / 2; }
+                 snapX = Math.round(point.x / grid) * grid; snapZ = Math.round(point.z / grid) * grid;
+             } else if (item.buildType === 'roof') {
+                 if (targetIsPlaced && targetObject.userData && targetObject.userData.buildType === 'wall' && targetObject.geometry.parameters) {
+                    snapY = targetObject.position.y + targetObject.geometry.parameters.height / 2 + size.y / 2; // Assumes parameters.height exists
+                 } else { snapY = adjustedPoint.y + size.y / 2; }
+                 snapX = Math.round(point.x / grid) * grid; snapZ = Math.round(point.z / grid) * grid;
+            } else if (item.buildType === 'door') {
+                 snapY = adjustedPoint.y + size.y / 2;
+                 snapX = Math.round(point.x / grid) * grid; snapZ = Math.round(point.z / grid) * grid;
+            }
+            if (snapY - size.y / 2 < 0.01) { snapY = size.y / 2 + 0.01; }
+
+            return new THREE.Vector3(snapX, snapY, snapZ);
+        }
+
+        // --- Player Actions ---
+        function placeSelectedItem() {
+             // Raycaster usage might need adjustment for r128
+             const itemId = toolbarItems[selectedToolbarIndex];
+             if (!itemId || !items[itemId] || !items[itemId].placeable || !buildIndicatorMesh) return; // Added check for buildIndicatorMesh
+
+             // Check if raycaster.setFromCamera exists and works as expected in r128
+             try {
+                 raycaster.setFromCamera(pointer, camera);
+             } catch (e) {
+                 console.error("raycaster.setFromCamera failed. r128 compatibility issue?", e);
+                 // Fallback attempt for older versions (might not be correct for r128 specifically)
+                 /*
+                 const rayDirection = new THREE.Vector3(pointer.x, pointer.y, 0.5).unproject(camera).sub(camera.position).normalize();
+                 raycaster.set(camera.position, rayDirection);
+                 */
+                  showActionFeedback("Placement Error (Raycaster)");
+                  return;
+             }
+
+
+             const targets = [scene.getObjectByName("ground"), ...placedObjects].filter(Boolean);
+             const intersects = raycaster.intersectObjects(targets, false); // intersectObjects should work
+
+             if (intersects.length > 0) {
+                 const intersection = intersects[0];
+                 if (intersection.distance > PLACEMENT_REACH) { showActionFeedback("Too far away"); return; }
+
+                 const item = items[itemId];
+                 const pos = calculateSnappedPosition(intersection, item);
+                 if (!pos) { showActionFeedback("Cannot place here"); return; }
+
+                 if (removeFromInventory(itemId, 1)) {
+                     const mesh = new THREE.Mesh(item.geometry, item.material);
+                     mesh.position.copy(pos);
+                     if (buildIndicatorMesh.visible) { mesh.rotation.copy(buildIndicatorMesh.rotation); }
+                     mesh.castShadow = true; mesh.receiveShadow = true;
+                     mesh.userData = { itemId: itemId, buildType: item.buildType, placedTime: Date.now() };
+                     mesh.name = `placed_${itemId}_${placedObjects.length}`;
+                     scene.add(mesh); placedObjects.push(mesh);
+
+                     // PointLight should work
+                     if (item.light) {
+                         const light = new THREE.PointLight(0xffaa00, 0.8, 12); // r128 PointLight args: color, intensity, distance
+                         light.castShadow = false;
+                         // Use item size for positioning light
+                         light.position.set(0, item.size.y * 0.4, 0);
+                         mesh.add(light);
+                     }
+                     showActionFeedback(`Placed ${item.name}`);
+                 } else { showActionFeedback(`No ${item.name} in inventory`); }
+             }
+         }
+
+         function useTool() {
+             // Raycaster usage (see placeSelectedItem notes)
+             if (!controls || !controls.isLocked) return;
+             const selectedItemId = toolbarItems[selectedToolbarIndex];
+             const toolItem = items[selectedItemId];
+             if (!toolItem || !toolItem.toolType) return;
+
+             try {
+                  raycaster.setFromCamera(pointer, camera);
+             } catch (e) {
+                 console.error("raycaster.setFromCamera failed in useTool. r128 compatibility issue?", e);
+                 showActionFeedback("Interaction Error (Raycaster)");
+                 return;
+             }
+
+             // Intersect against harvestable objects
+             const intersects = raycaster.intersectObjects(objects, true); // Recursive check is fine
+
+             if (intersects.length > 0) {
+                 const intersection = intersects[0];
+                 if (intersection.distance <= INTERACTION_REACH) {
+                     let targetObject = intersection.object;
+                     // Parent traversal for groups works the same
+                     while (targetObject.parent && (!targetObject.userData || !targetObject.userData.type)) { targetObject = targetObject.parent; }
+
+                     if (targetObject.userData && targetObject.userData.type && targetObject.userData.resource) {
+                         const data = targetObject.userData;
+                         if (data.tool && data.tool === toolItem.toolType) { harvestResource(targetObject); }
+                         else if (data.tool) { showActionFeedback(`Requires ${data.tool}`); }
+                         else { showActionFeedback("Cannot harvest this"); }
+                     }
+                 }
+             }
+         }
+
+        function harvestResource(targetObject) {
+            // Logic is mostly pure JS, scene.remove and array splicing are standard
+            if (!targetObject || !targetObject.userData) return;
+            const data = targetObject.userData;
+            const resource = data.resource; const amount = data.yieldAmount;
+            const secondaryResource = data.secondaryResource; const secondaryAmount = data.secondaryYield;
+
+            if (resource && amount > 0 && items[resource]) { addToInventory(resource, amount); showActionFeedback(`+${amount} ${items[resource].name}`); }
+            if (secondaryResource && secondaryAmount > 0 && items[secondaryResource]) { addToInventory(secondaryResource, secondaryAmount); console.log(`+${secondaryAmount} ${items[secondaryResource].name}`); }
+
+            scene.remove(targetObject);
+            const index = objects.indexOf(targetObject);
+            if (index > -1) { objects.splice(index, 1); }
+            else { console.warn("Harvested object not found in objects array?"); }
+        }
+
+        // --- UI Updates --- (Pure DOM manipulation, should be fine)
+        function showActionFeedback(text) { /* ... unchanged ... */
+            const feedback = document.getElementById("action-feedback");
+            feedback.textContent = text;
+            feedback.style.display = "block";
+            clearTimeout(feedbackTimeout);
+            feedbackTimeout = setTimeout(() => { feedback.style.display = "none"; }, 1500);
+        }
+        function updateInventoryUI() { /* ... unchanged ... */
+            const list = document.getElementById("inventory-list");
+            if (!list) return;
+            list.innerHTML = "";
+            let empty = true;
+            const sortedInventory = Object.keys(inventory)
+                .filter(id => inventory[id] > 0 && items[id])
+                .sort((a, b) => items[a].name.localeCompare(items[b].name));
+            for (const id of sortedInventory) {
+                 const item = items[id]; const count = inventory[id];
+                 const div = document.createElement("div");
+                 div.textContent = `${item.name}: ${count}`;
+                 list.appendChild(div); empty = false;
+            }
+            if (empty) list.textContent = "Empty";
+        }
+        function updateToolbarUI() { /* ... unchanged ... */
+            const toolbar = document.getElementById("toolbar-ui");
+            if (!toolbar) return;
+            toolbar.innerHTML = ""; toolbarItems.length = 0;
+            const available = Object.keys(inventory)
+                .filter(id => items[id] && (items[id].placeable || items[id].toolType) && inventory[id] > 0)
+                .sort((a, b) => items[a].name.localeCompare(items[b].name))
+                .slice(0, MAX_TOOLBAR_SLOTS);
+            for (let i = 0; i < MAX_TOOLBAR_SLOTS; i++) {
+                const itemId = available[i]; const slot = document.createElement("div");
+                slot.classList.add("toolbar-slot"); slot.dataset.index = i;
+                if (itemId) {
+                    const item = items[itemId]; const count = inventory[itemId];
+                    toolbarItems[i] = itemId;
+                    slot.textContent = item.name.substring(0, 3).toUpperCase();
+                    slot.title = `${item.name}`;
+                    if (count > 1 || item.placeable) {
+                        slot.title += ` (${count})`;
+                        const countSpan = document.createElement("span");
+                        countSpan.classList.add("count"); countSpan.textContent = count;
+                        slot.appendChild(countSpan);
+                    }
+                } else { toolbarItems[i] = null; }
+                if (i === selectedToolbarIndex) slot.classList.add("selected");
+                slot.addEventListener("click", () => { selectedToolbarIndex = i; updateToolbarUI(); updateBuildIndicator(null); });
+                toolbar.appendChild(slot);
+            }
+        }
+        function updateCraftingUI() { /* ... unchanged ... */
+            const list = document.getElementById("crafting-list");
+            if (!list) return;
+            list.innerHTML = "";
+             const sortedRecipes = Object.keys(recipes)
+                 .sort((a, b) => recipes[a].name.localeCompare(recipes[b].name));
+            for (const id of sortedRecipes) {
+                const recipe = recipes[id]; const productItem = items[id];
+                if (!productItem) continue;
+                const canCraft = hasEnoughItems(recipe.requires);
+                const div = document.createElement("div");
+                div.classList.add("crafting-recipe");
+                const reqText = Object.entries(recipe.requires)
+                    .map(([reqId, quantity]) => {
+                         const reqItem = items[reqId]; const currentAmount = inventory[reqId] || 0;
+                         const color = currentAmount >= quantity ? 'lightgreen' : 'salmon';
+                         return `<span style="color:${color}">${quantity}x ${reqItem ? reqItem.name : reqId}</span>`;
+                    }).join(", ");
+                 div.innerHTML = `<span><b>${recipe.produces}x ${recipe.name}</b><br/><small>Requires: ${reqText}</small></span>`;
+                const btn = document.createElement("button");
+                btn.textContent = "Craft"; btn.disabled = !canCraft;
+                btn.onclick = () => { craftItem(id); };
+                div.appendChild(btn); list.appendChild(div);
+            }
+             if (list.children.length === 0) list.textContent = "No recipes available.";
+        }
+        function toggleCraftingMenu() { /* ... unchanged ... */
+            const ui = document.getElementById("crafting-ui"); const isOpen = ui.style.display === "block";
+            if (isOpen) {
+                ui.style.display = "none";
+                if (controls && !controls.isLocked) { controls.lock(); }
+            } else {
+                updateCraftingUI(); ui.style.display = "block";
+                if (controls && controls.isLocked) { controls.unlock(); }
+            }
+        }
+
+        // --- Event Handlers --- (Should be compatible)
+        function onWindowResize() { /* ... unchanged ... */
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        function onPointerDown(event) { /* ... unchanged ... */
+            if (controls && controls.isLocked) {
+                switch (event.button) { case 0: useTool(); break; case 2: placeSelectedItem(); break; }
+            }
+             if (controls && controls.isLocked && event.button === 2) { event.preventDefault(); }
+        }
+        function onKeyDown(event) { /* ... mostly unchanged ... */
+             switch (event.code) {
+                 case "KeyC": toggleCraftingMenu(); return;
+                 case "Digit1": case "Digit2": case "Digit3": case "Digit4": case "Digit5":
+                 case "Digit6": case "Digit7": case "Digit8": case "Digit9":
+                      const index = parseInt(event.code.slice(5)) - 1;
+                     if (index >= 0 && index < MAX_TOOLBAR_SLOTS) {
+                          if (selectedToolbarIndex !== index) { selectedToolbarIndex = index; updateToolbarUI(); updateBuildIndicator(null); }
+                      }
+                     return;
+             }
+             // Movement keys only if controls exist and are locked
+             if (controls && controls.isLocked) {
+                 switch (event.code) {
+                     case "ArrowUp": case "KeyW": moveForward = true; break;
+                     case "ArrowLeft": case "KeyA": moveLeft = true; break;
+                     case "ArrowDown": case "KeyS": moveBackward = true; break;
+                     case "ArrowRight": case "KeyD": moveRight = true; break;
+                     case "Space": if (canJump) { velocity.y += 350; canJump = false; } break; // Jump velocity might need tuning
+                 }
+             }
+         }
+        function onKeyUp(event) { /* ... unchanged ... */
+            switch (event.code) {
+                case "ArrowUp": case "KeyW": moveForward = false; break;
+                case "ArrowLeft": case "KeyA": moveLeft = false; break;
+                case "ArrowDown": case "KeyS": moveBackward = false; break;
+                case "ArrowRight": case "KeyD": moveRight = false; break;
+            }
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            let intersection = null;
+
+            // Check controls exist and are locked
+            if (controls && controls.isLocked) {
+                // Physics simulation (Vector3 math is fundamental)
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 100.0 * delta; // Gravity
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize();
+                const speed = 400.0;
+                if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+
+                // PointerLockControls move methods should work
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+                controls.getObject().position.y += velocity.y * delta; // Apply vertical
+
+                // Ground collision
+                if (controls.getObject().position.y < playerHeight) {
+                    velocity.y = 0; controls.getObject().position.y = playerHeight; canJump = true;
+                }
+
+                // Raycasting (check notes in placeSelectedItem/useTool)
+                try {
+                    raycaster.setFromCamera(pointer, camera);
+                    const interactionTargets = [scene.getObjectByName("ground"), ...placedObjects, ...objects].filter(Boolean);
+                    const intersects = raycaster.intersectObjects(interactionTargets, true);
+                    for (const hit of intersects) { if (hit.distance <= PLACEMENT_REACH) { intersection = hit; break; } }
+                } catch(e) {
+                    // Error handled in place/use functions if specific call fails
+                     if (DEBUG) console.warn("Raycasting failed in animate loop (likely setFromCamera)");
+                     intersection = null; // Ensure intersection is null if raycast fails
+                }
+
+            } // End controls.isLocked check
+
+            // Update build indicator (handles null intersection)
+            updateBuildIndicator(intersection);
+
+            prevTime = time;
+            renderer.render(scene, camera);
+        }
+
+        // --- Start the application ---
+        // Check THREE again before init, just in case
+        if (typeof THREE !== 'undefined') {
+            init();
+        } else {
+            console.error("Cannot initialize game, THREE is undefined.");
+            // Blocker should already show error from initial check
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js HTTP Example</title>
+    <style>
+        /* Basic styling to remove default margin and make canvas fill the window */
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; } /* Prevent scrollbars */
+    </style>
+</head>
+<body>
+    <!-- We will load Three.js library from a CDN using HTTP -->
+    <!-- Note: Using HTTP is generally not recommended for security reasons -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // Global variables
+        let scene, camera, renderer;
+        let cube;
+
+        function init() {
+            // 1. Scene: Container for all objects, lights, cameras
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdddddd); // Set background color to light grey
+
+            // 2. Camera: How we view the scene
+            // PerspectiveCamera(Field of View, Aspect Ratio, Near Clip Plane, Far Clip Plane)
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5; // Move the camera back so we can see the object at (0,0,0)
+
+            // 3. Renderer: Renders the scene using WebGL
+            renderer = new THREE.WebGLRenderer({ antialias: true }); // antialias smooths edges
+            renderer.setSize(window.innerWidth, window.innerHeight); // Set size to full window
+            document.body.appendChild(renderer.domElement); // Add the renderer's canvas element to the DOM
+
+            // 4. Geometry: The shape of the object (a cube)
+            const geometry = new THREE.BoxGeometry(1, 1, 1); // Width, Height, Depth
+
+            // 5. Material: How the object looks (color, texture, etc.)
+            // MeshBasicMaterial doesn't require lights to be visible
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true }); // Green wireframe
+
+            // 6. Mesh: An object composed of a Geometry and a Material
+            cube = new THREE.Mesh(geometry, material);
+            scene.add(cube); // Add the cube to the scene
+
+            // Handle window resizing
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Start the animation loop
+            animate();
+        }
+
+        // Function to handle window resize events
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; // Update aspect ratio
+            camera.updateProjectionMatrix(); // Apply changes
+            renderer.setSize(window.innerWidth, window.innerHeight); // Update renderer size
+        }
+
+        // Animation loop function
+        function animate() {
+            requestAnimationFrame(animate); // Request the next frame
+
+            // Rotate the cube slightly each frame
+            if (cube) {
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+            }
+
+            // Render the scene from the perspective of the camera
+            renderer.render(scene, camera);
+        }
+
+        // Check if THREE is loaded (since it's loaded from external script)
+        if (typeof THREE !== 'undefined') {
+            init(); // Initialize and start the Three.js scene
+        } else {
+            console.error("Three.js library failed to load. Check the HTTP CDN link and network connection.");
+            document.body.innerHTML = '<p style="color: red; font-family: sans-serif;">Error: Could not load Three.js library. Check console for details.</p>';
+        }
+
+    </script>
+</body>
+</html>

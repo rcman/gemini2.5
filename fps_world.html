@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js HTTP FPS World</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; /* Sky blue */ }
+        canvas { display: block; }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        #instructions {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size: 36px">Click to play</p>
+            <p>
+                Move: WASD<br/>
+                Jump: SPACE<br/>
+                Look: MOUSE
+            </p>
+        </div>
+    </div>
+
+    <!-- Load Three.js core library from HTTP CDN -->
+    <!-- Note: Using HTTP is generally not recommended -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- Load PointerLockControls from an HTTP CDN -->
+    <!-- NOTE: Finding reliable HTTP CDNs for specific example files can be hard -->
+    <!-- This link *might* work, but could be unreliable or redirect -->
+    <script src="http://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
+
+    <script>
+        let camera, scene, renderer, controls;
+
+        const objects = []; // For potential future collision detection (not implemented here)
+
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+        let canJump = false;
+
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const worldScale = 200; // How large the ground plane is
+
+        init();
+        animate();
+
+        function init() {
+
+            // 1. Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color( 0x87CEEB ); // Sky blue
+            scene.fog = new THREE.Fog( 0x87CEEB, 0, worldScale * 0.75 ); // Add fog for distance effect
+
+            // 2. Camera
+            camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+            camera.position.y = 10; // Start camera slightly above the ground
+
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer( { antialias: true } );
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild( renderer.domElement );
+
+            // 4. Lights
+            const ambientLight = new THREE.AmbientLight( 0xcccccc, 0.4 ); // Soft ambient light
+            scene.add( ambientLight );
+
+            const directionalLight = new THREE.DirectionalLight( 0xffffff, 0.8 );
+            directionalLight.position.set( 50, 200, 100 );
+            directionalLight.castShadow = true;
+            // Configure shadow properties
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            directionalLight.shadow.camera.left = -worldScale;
+            directionalLight.shadow.camera.right = worldScale;
+            directionalLight.shadow.camera.top = worldScale;
+            directionalLight.shadow.camera.bottom = -worldScale;
+            scene.add( directionalLight );
+            // const helper = new THREE.CameraHelper( directionalLight.shadow.camera ); // Optional: visualize shadow camera
+            // scene.add( helper );
+
+
+            // 5. Controls (Pointer Lock)
+            if (typeof THREE.PointerLockControls === 'undefined') {
+                console.error("PointerLockControls failed to load. Check the HTTP CDN link.");
+                document.getElementById('instructions').innerHTML = '<p style="color: red;">Error: Could not load PointerLockControls. Controls will not work.</p>';
+                // Optionally disable the blocker if controls can't load
+                 document.getElementById('blocker').style.display = 'none';
+            } else {
+                controls = new THREE.PointerLockControls( camera, document.body );
+
+                const blocker = document.getElementById( 'blocker' );
+                const instructions = document.getElementById( 'instructions' );
+
+                instructions.addEventListener( 'click', function () {
+                    controls.lock();
+                } );
+
+                controls.addEventListener( 'lock', function () {
+                    instructions.style.display = 'none';
+                    blocker.style.display = 'none';
+                } );
+
+                controls.addEventListener( 'unlock', function () {
+                    blocker.style.display = 'block';
+                    instructions.style.display = '';
+                } );
+
+                scene.add( controls.getObject() ); // Add the camera holder to the scene
+
+                // Keyboard Controls Listeners
+                const onKeyDown = function ( event ) {
+                    switch ( event.code ) {
+                        case 'ArrowUp':
+                        case 'KeyW':
+                            moveForward = true;
+                            break;
+                        case 'ArrowLeft':
+                        case 'KeyA':
+                            moveLeft = true;
+                            break;
+                        case 'ArrowDown':
+                        case 'KeyS':
+                            moveBackward = true;
+                            break;
+                        case 'ArrowRight':
+                        case 'KeyD':
+                            moveRight = true;
+                            break;
+                        case 'Space':
+                            if ( canJump === true ) velocity.y += 250; // Jump impulse
+                            canJump = false;
+                            break;
+                    }
+                };
+
+                const onKeyUp = function ( event ) {
+                    switch ( event.code ) {
+                        case 'ArrowUp':
+                        case 'KeyW':
+                            moveForward = false;
+                            break;
+                        case 'ArrowLeft':
+                        case 'KeyA':
+                            moveLeft = false;
+                            break;
+                        case 'ArrowDown':
+                        case 'KeyS':
+                            moveBackward = false;
+                            break;
+                        case 'ArrowRight':
+                        case 'KeyD':
+                            moveRight = false;
+                            break;
+                    }
+                };
+
+                document.addEventListener( 'keydown', onKeyDown );
+                document.addEventListener( 'keyup', onKeyUp );
+            }
+
+
+            // 6. World Elements
+
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry( worldScale, worldScale, 50, 50 );
+            groundGeometry.rotateX( - Math.PI / 2 ); // Rotate flat
+            const groundMaterial = new THREE.MeshStandardMaterial( { color: 0x556B2F, // Dark Olive Green
+                                                                   roughness: 1.0,
+                                                                   metalness: 0.0 } );
+            const ground = new THREE.Mesh( groundGeometry, groundMaterial );
+            ground.receiveShadow = true; // Allow ground to receive shadows
+            scene.add( ground );
+
+            // --- Add World Objects ---
+            createTrees(30);
+            createRocks(50);
+            createBarrels(15);
+            createBuildings(5);
+            createWaterBodies(3);
+            createAnimals(10); // Very simple representations
+
+            // --- Event Listeners ---
+            window.addEventListener( 'resize', onWindowResize );
+        }
+
+        // --- Object Creation Functions ---
+
+        function createTrees(count) {
+            const trunkHeight = 5;
+            const leavesHeight = 6;
+            const trunkRadius = 0.5;
+            const leavesRadius = 2.5;
+
+            const trunkGeometry = new THREE.CylinderGeometry(trunkRadius, trunkRadius, trunkHeight, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Saddle Brown
+
+            const leavesGeometry = new THREE.ConeGeometry(leavesRadius, leavesHeight, 8);
+            const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 }); // Forest Green
+
+            for (let i = 0; i < count; i++) {
+                const tree = new THREE.Group(); // Group trunk and leaves
+
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.y = trunkHeight / 2; // Position trunk base on the ground plane
+                trunk.castShadow = true;
+                trunk.receiveShadow = false; // Trunk unlikely to receive shadow from leaves in this setup
+
+                const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+                leaves.position.y = trunkHeight + leavesHeight / 2; // Position leaves above trunk
+                leaves.castShadow = true;
+                leaves.receiveShadow = true;
+
+                tree.add(trunk);
+                tree.add(leaves);
+
+                // Random position within bounds, avoiding center too much
+                const radius = worldScale * 0.45;
+                tree.position.x = (Math.random() - 0.5) * radius * 2;
+                tree.position.z = (Math.random() - 0.5) * radius * 2;
+                tree.position.y = 0; // Base of the group is on the ground
+
+                // Slight random rotation and scale
+                tree.rotation.y = Math.random() * Math.PI * 2;
+                const scale = 0.8 + Math.random() * 0.4; // Scale between 0.8 and 1.2
+                tree.scale.set(scale, scale, scale);
+
+
+                scene.add(tree);
+                // objects.push(tree); // Add for potential collision later
+            }
+        }
+
+        function createRocks(count) {
+            const rockGeometry = new THREE.IcosahedronGeometry(1, 0); // Simple polyhedron, radius 1, detail 0
+            const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x808080, // Grey
+                                                                roughness: 0.8,
+                                                                flatShading: true });
+
+            for (let i = 0; i < count; i++) {
+                const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+
+                // Random position
+                const radius = worldScale * 0.48; // Place closer to edge
+                rock.position.x = (Math.random() - 0.5) * radius * 2;
+                rock.position.z = (Math.random() - 0.5) * radius * 2;
+
+                // Random scale & rotation
+                const scale = 0.5 + Math.random() * 1.5; // Size 0.5 to 2.0
+                rock.scale.set(scale, scale * (0.8 + Math.random() * 0.4), scale); // Slightly non-uniform
+                rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+
+                rock.position.y = (scale * rock.geometry.parameters.radius) / 2; // Sit roughly on ground
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+
+                scene.add(rock);
+                // objects.push(rock);
+            }
+        }
+
+        function createBarrels(count) {
+             const barrelGeometry = new THREE.CylinderGeometry( 0.8, 0.8, 1.5, 16 ); // Radius top, bottom, height, segments
+             const barrelMaterial = new THREE.MeshStandardMaterial( { color: 0xCD853F, // Peru (brownish)
+                                                                     roughness: 0.6,
+                                                                     metalness: 0.2 });
+
+            for (let i = 0; i < count; i++) {
+                 const barrel = new THREE.Mesh( barrelGeometry, barrelMaterial );
+
+                 // Random position
+                 const radius = worldScale * 0.45;
+                 barrel.position.x = (Math.random() - 0.5) * radius * 2;
+                 barrel.position.z = (Math.random() - 0.5) * radius * 2;
+                 barrel.position.y = 1.5 / 2; // Sit on ground
+                 barrel.castShadow = true;
+                 barrel.receiveShadow = true;
+
+                 // Sometimes tipped over
+                 if (Math.random() < 0.2) {
+                    barrel.rotation.z = Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
+                    barrel.rotation.y = Math.random() * Math.PI * 2;
+                    barrel.position.y = 0.8; // Radius when tipped
+                 }
+
+
+                 scene.add(barrel);
+                 // objects.push(barrel);
+            }
+        }
+
+        function createBuildings(count) {
+            const buildingMaterial = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, // Light Grey
+                                                                    roughness: 0.9 });
+            for (let i = 0; i < count; i++) {
+                const width = 8 + Math.random() * 12; // Width 8 to 20
+                const height = 10 + Math.random() * 10; // Height 10 to 20
+                const depth = 8 + Math.random() * 12; // Depth 8 to 20
+                const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
+                const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+
+                // Random position
+                const radius = worldScale * 0.4; // Keep slightly away from edge
+                building.position.x = (Math.random() - 0.5) * radius * 2;
+                building.position.z = (Math.random() - 0.5) * radius * 2;
+                building.position.y = height / 2; // Sit on ground
+                building.castShadow = true;
+                building.receiveShadow = true;
+
+                scene.add(building);
+                 // objects.push(building); // Might need more complex collision for buildings
+            }
+        }
+
+         function createWaterBodies(count) {
+            const waterMaterial = new THREE.MeshStandardMaterial({
+                color: 0x4682B4, // Steel Blue
+                transparent: true,
+                opacity: 0.75,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+
+            for (let i = 0; i < count; i++) {
+                const radius = 10 + Math.random() * 15; // Size 10 to 25
+                // Using CircleGeometry for flat water patch
+                const waterGeometry = new THREE.CircleGeometry(radius, 32);
+                waterGeometry.rotateX(-Math.PI / 2); // Make it flat on XZ plane
+
+                const water = new THREE.Mesh(waterGeometry, waterMaterial);
+
+                // Random position
+                const placeRadius = worldScale * 0.4;
+                water.position.x = (Math.random() - 0.5) * placeRadius * 2;
+                water.position.z = (Math.random() - 0.5) * placeRadius * 2;
+                water.position.y = 0.1; // Slightly above ground to avoid z-fighting
+                water.receiveShadow = true; // Water can receive shadows
+
+                scene.add(water);
+            }
+        }
+
+        function createAnimals(count) {
+            // SUPER simple representation (e.g., a brown box)
+            const animalGeometry = new THREE.BoxGeometry(2, 1, 3); // Basic rectangular shape
+            const animalMaterial = new THREE.MeshStandardMaterial({ color: 0xA0522D }); // Sienna
+
+            for (let i = 0; i < count; i++) {
+                const animal = new THREE.Mesh(animalGeometry, animalMaterial);
+
+                // Random position
+                const radius = worldScale * 0.45;
+                animal.position.x = (Math.random() - 0.5) * radius * 2;
+                animal.position.z = (Math.random() - 0.5) * radius * 2;
+                animal.position.y = 1 / 2; // Sit on ground
+                animal.castShadow = true;
+                animal.receiveShadow = true;
+
+                // Random orientation
+                animal.rotation.y = Math.random() * Math.PI * 2;
+
+                scene.add(animal);
+                // objects.push(animal);
+            }
+        }
+
+
+        // --- Core Functions ---
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize( window.innerWidth, window.innerHeight );
+        }
+
+        function animate() {
+            requestAnimationFrame( animate );
+
+            const time = performance.now();
+
+            // Only move if controls are locked and PointerLockControls loaded
+            if (controls && controls.isLocked === true ) {
+                const delta = ( time - prevTime ) / 1000; // Time delta in seconds
+
+                // Dampen velocities
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 100.0 * delta; // Gravity simulation (100 = mass)
+
+                direction.z = Number( moveForward ) - Number( moveBackward );
+                direction.x = Number( moveRight ) - Number( moveLeft );
+                direction.normalize(); // Ensures consistent speed in all directions
+
+                // Apply movement based on direction flags
+                if ( moveForward || moveBackward ) velocity.z -= direction.z * 400.0 * delta;
+                if ( moveLeft || moveRight ) velocity.x -= direction.x * 400.0 * delta;
+
+                // Move player based on calculated velocities
+                controls.moveRight( - velocity.x * delta );
+                controls.moveForward( - velocity.z * delta );
+                controls.getObject().position.y += ( velocity.y * delta ); // Apply gravity/jump
+
+                // Simple ground collision detection
+                if ( controls.getObject().position.y < 10 ) { // 10 is approx player height
+                    velocity.y = 0; // Stop falling
+                    controls.getObject().position.y = 10; // Reset position to ground level
+                    canJump = true; // Allow jumping again
+                }
+            } else if (!controls && document.getElementById('blocker').style.display !== 'none') {
+                 // If controls failed to load, ensure blocker is hidden after init
+                 // document.getElementById('blocker').style.display = 'none'; // Redundant check now
+            }
+
+            prevTime = time;
+
+            renderer.render( scene, camera );
+        }
+
+         // Final check in case THREE failed entirely
+        if (typeof THREE === 'undefined') {
+            console.error("Three.js core library failed to load. Check the HTTP CDN link and network connection.");
+            document.body.innerHTML = '<p style="color: red; font-family: sans-serif;">Error: Could not load Three.js library. Cannot run example.</p>';
+            // Hide blocker if THREE fails
+             document.getElementById('blocker').style.display = 'none';
+        }
+
+    </script>
+</body>
+</html>

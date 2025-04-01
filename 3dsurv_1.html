@@ -1,0 +1,1864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        canvas { display: block; }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex; /* Use flexbox */
+            justify-content: center; /* Center horizontally */
+            align-items: center; /* Center vertically */
+            color: white;
+            font-size: 30px;
+            text-align: center;
+            cursor: pointer;
+        }
+        #instructions {
+            width: 50%;
+        }
+        .hidden { display: none; }
+
+        /* UI Elements */
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allow clicks to pass through initially */
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background-color: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #quick-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #555;
+            pointer-events: auto;
+        }
+        .quick-slot {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #888;
+            margin: 5px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            position: relative; /* For item count */
+        }
+         .quick-slot.selected {
+             border: 2px solid yellow;
+         }
+        .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 10px;
+            background-color: rgba(0,0,0,0.7);
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+
+
+        #inventory-panel, #build-menu, #start-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60%;
+            max-width: 600px;
+            background-color: rgba(50, 50, 50, 0.9);
+            border: 2px solid #aaa;
+            padding: 20px;
+            color: white;
+            pointer-events: auto; /* Enable interaction when visible */
+            z-index: 10; /* Ensure it's above other UI */
+        }
+
+        #inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .inventory-slot {
+            width: 60px;
+            height: 60px;
+            border: 1px solid #888;
+            background-color: rgba(255, 255, 255, 0.1);
+             display: flex; /* Use flexbox */
+             justify-content: center; /* Center horizontally */
+             align-items: center; /* Center vertically */
+             font-size: 12px;
+             cursor: grab;
+             position: relative; /* For item count */
+        }
+        /* Styling for draggable items */
+        .dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        /* Start Screen Specifics */
+         #start-screen label { display: block; margin-top: 10px;}
+         #start-screen input { width: 80px; margin-left: 10px;}
+         #start-screen button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            cursor: pointer;
+            font-size: 16px;
+         }
+
+         /* Build Menu Specifics */
+         #build-menu h3 { margin-top: 0; }
+         #build-menu ul { list-style: none; padding: 0;}
+         #build-menu li { margin-bottom: 10px; }
+         #build-menu button {
+            margin-left: 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+         }
+         #build-menu button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+         }
+
+        /* Interaction Prompt */
+        #interaction-prompt {
+            position: absolute;
+            bottom: 100px; /* Above quick bar */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Blocker screen for Pointer Lock -->
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size:36px">Click to play</p>
+            <p>
+                W, A, S, D = Move<br/>
+                SPACE = Jump<br/>
+                MOUSE = Look<br/>
+                TAB = Inventory<br/>
+                B = Build Menu<br/>
+                E = Interact<br/>
+                Left Click = Use/Attack<br/>
+                Right Click = Place Item (when building)<br/>
+                1-9 = Select Quick Slot<br/>
+                ESC = Release Mouse
+            </p>
+        </div>
+    </div>
+
+    <!-- UI Container -->
+    <div id="ui-container">
+        <div id="crosshair"></div>
+
+        <!-- Quick Bar -->
+        <div id="quick-bar">
+            <!-- Slots will be generated by JS -->
+        </div>
+
+        <!-- Inventory Panel (Initially Hidden) -->
+        <div id="inventory-panel" class="hidden">
+            <h2>Inventory</h2>
+            <div id="inventory-grid">
+                 <!-- Slots will be generated by JS -->
+            </div>
+            <p>Drag items to Quick Bar slots below.</p>
+            <button onclick="uiManager.toggleInventory()">Close</button>
+        </div>
+
+         <!-- Build Menu (Initially Hidden) -->
+        <div id="build-menu" class="hidden">
+            <h3>Build Menu</h3>
+            <ul id="build-options-list">
+                 <!-- Build options will be generated by JS -->
+            </ul>
+            <button onclick="uiManager.toggleBuildMenu()">Close</button>
+        </div>
+
+        <!-- Interaction Prompt (Initially Hidden) -->
+        <div id="interaction-prompt" class="hidden">Interact Text</div>
+
+         <!-- Start Screen (Initially Visible) -->
+        <div id="start-screen">
+            <h2>Game Settings</h2>
+            <div>
+                <label for="start-wood">Wood:</label>
+                <input type="number" id="start-wood" value="10" min="0">
+            </div>
+             <div>
+                <label for="start-stone">Stone:</label>
+                <input type="number" id="start-stone" value="10" min="0">
+            </div>
+             <div>
+                <label for="start-speed">Player Speed:</label>
+                <input type="number" id="start-speed" value="150" min="50" step="10">
+            </div>
+             <div>
+                <label for="start-height">Player Height:</label>
+                <input type="number" id="start-height" value="1.8" min="0.5" max="3.0" step="0.1">
+            </div>
+            <button id="start-game-button">Start Game</button>
+        </div>
+
+    </div>
+
+    <!-- Game Container -->
+    <div id="game-container"></div>
+
+    <!-- IMPORTANT: Using HTTP CDN for Three.js as requested -->
+    <!-- This is NOT recommended for production or secure environments -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- We need PointerLockControls separately -->
+    <script>
+        // PointerLockControls (inline or find an HTTP CDN - harder)
+        // Source: Slightly modified from Three.js examples (r128)
+        var PointerLockControls = function ( camera, domElement ) {
+
+            if ( domElement === undefined ) {
+                console.warn( 'THREE.PointerLockControls: The second parameter "domElement" is now mandatory.' );
+                domElement = document.body;
+            }
+
+            this.domElement = domElement;
+            this.isLocked = false;
+
+            // Set to constrain the pitch of the camera
+            // Range is 0 to Math.PI radians
+            this.minPolarAngle = 0; // radians
+            this.maxPolarAngle = Math.PI; // radians
+
+            var scope = this;
+
+            var changeEvent = { type: 'change' };
+            var lockEvent = { type: 'lock' };
+            var unlockEvent = { type: 'unlock' };
+
+            var euler = new THREE.Euler( 0, 0, 0, 'YXZ' );
+
+            var PI_2 = Math.PI / 2;
+
+            var vec = new THREE.Vector3();
+
+            function onMouseMove( event ) {
+
+                if ( scope.isLocked === false ) return;
+
+                var movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                var movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+                euler.setFromQuaternion( camera.quaternion );
+
+                euler.y -= movementX * 0.002;
+                euler.x -= movementY * 0.002;
+
+                euler.x = Math.max( PI_2 - scope.maxPolarAngle, Math.min( PI_2 - scope.minPolarAngle, euler.x ) );
+
+                camera.quaternion.setFromEuler( euler );
+
+                scope.dispatchEvent( changeEvent );
+
+            }
+
+            function onPointerlockChange() {
+
+                if ( document.pointerLockElement === scope.domElement ) {
+
+                    scope.dispatchEvent( lockEvent );
+                    scope.isLocked = true;
+
+                } else {
+
+                    scope.dispatchEvent( unlockEvent );
+                    scope.isLocked = false;
+
+                }
+
+            }
+
+            function onPointerlockError() {
+
+                console.error( 'THREE.PointerLockControls: Unable to use Pointer Lock API' );
+
+            }
+
+            this.connect = function () {
+
+                document.addEventListener( 'mousemove', onMouseMove, false );
+                document.addEventListener( 'pointerlockchange', onPointerlockChange, false );
+                document.addEventListener( 'pointerlockerror', onPointerlockError, false );
+
+            };
+
+            this.disconnect = function () {
+
+                document.removeEventListener( 'mousemove', onMouseMove, false );
+                document.removeEventListener( 'pointerlockchange', onPointerlockChange, false );
+                document.removeEventListener( 'pointerlockerror', onPointerlockError, false );
+
+            };
+
+            this.dispose = function () {
+
+                this.disconnect();
+
+            };
+
+            this.getObject = function () { // retaining this method for backward compatibility
+
+                return camera;
+
+            };
+
+            this.getDirection = function () {
+
+                var direction = new THREE.Vector3( 0, 0, - 1 );
+
+                return function ( v ) {
+
+                    return v.copy( direction ).applyQuaternion( camera.quaternion );
+
+                };
+
+            }();
+
+            this.moveForward = function ( distance ) {
+
+                // move forward parallel to the xz-plane
+                // assumes camera.up is y-up
+
+                vec.setFromMatrixColumn( camera.matrix, 0 );
+
+                vec.crossVectors( camera.up, vec );
+
+                camera.position.addScaledVector( vec, distance );
+
+            };
+
+            this.moveRight = function ( distance ) {
+
+                vec.setFromMatrixColumn( camera.matrix, 0 );
+
+                camera.position.addScaledVector( vec, distance );
+
+            };
+
+            this.lock = function () {
+
+                this.domElement.requestPointerLock();
+
+            };
+
+            this.unlock = function () {
+
+                document.exitPointerLock();
+
+            };
+
+            this.connect();
+
+        };
+
+        PointerLockControls.prototype = Object.create( THREE.EventDispatcher.prototype );
+        PointerLockControls.prototype.constructor = PointerLockControls;
+
+    </script>
+
+    <!-- Main Game Logic -->
+    <script type="module">
+        // --- Global Variables ---
+        let scene, camera, renderer, controls;
+        let player, world, inventoryManager, craftingManager, buildingManager, uiManager;
+        const clock = new THREE.Clock();
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        let raycaster = new THREE.Raycaster();
+        let interactableObjects = []; // Store objects that can be interacted with (trees, rocks, barrels etc.)
+        let animals = [];
+        let currentInteractable = null; // The object currently highlighted by the raycaster
+        let playerIsPlacing = false;
+        let itemToPlace = null;
+        let ghostPlacementMesh = null;
+
+        // --- Configuration ---
+        const playerConfig = {
+            height: 1.8, // Default height, overridden by start screen
+            speed: 150.0, // Default speed, overridden by start screen
+            jumpHeight: 8.0,
+            mass: 70.0, // For basic gravity/jump simulation
+            maxInteractionDistance: 5,
+        };
+        const worldConfig = {
+            groundSize: 500,
+            numTrees: 100,
+            numRocks: 80,
+            numBarrels: 20,
+            numBuildings: 5,
+            numAnimals: 10,
+        };
+        const quickBarSize = 9;
+        const inventorySize = 24; // Example size
+        const buildGridSize = 2; // Snap buildings to a 2x2 grid (adjust as needed)
+
+
+        // --- Classes (Simplified) ---
+
+        class Player {
+            constructor() {
+                this.velocity = new THREE.Vector3();
+                this.direction = new THREE.Vector3();
+                this.onGround = false;
+                this.height = playerConfig.height; // Set initial default
+                this.speed = playerConfig.speed;   // Set initial default
+                this.camera = camera; // Reference global camera controlled by PointerLock
+            }
+
+            applySettings(speed, height) {
+                this.speed = speed;
+                this.height = height;
+                camera.position.y = this.height; // Adjust camera height immediately
+                console.log(`Player settings applied: Speed=${this.speed}, Height=${this.height}`);
+            }
+
+            update(delta) {
+                 if (!controls.isLocked) {
+                    this.velocity.x = 0;
+                    this.velocity.z = 0;
+                    return; // Don't move if pointer isn't locked
+                }
+
+                this.velocity.x -= this.velocity.x * 10.0 * delta; // Friction
+                this.velocity.z -= this.velocity.z * 10.0 * delta; // Friction
+                this.velocity.y -= 9.8 * playerConfig.mass * delta * 0.1; // Basic gravity
+
+                this.direction.z = Number(moveForward) - Number(moveBackward);
+                this.direction.x = Number(moveRight) - Number(moveLeft);
+                this.direction.normalize(); // this ensures consistent movements in all directions
+
+                if (moveForward || moveBackward) this.velocity.z -= this.direction.z * this.speed * delta;
+                if (moveLeft || moveRight) this.velocity.x -= this.direction.x * this.speed * delta;
+
+                // Apply movement based on camera direction
+                controls.moveRight(-this.velocity.x * delta);
+                controls.moveForward(-this.velocity.z * delta);
+
+                // Apply gravity / vertical movement
+                camera.position.y += (this.velocity.y * delta);
+
+                // Simple ground collision
+                if (camera.position.y < this.height) {
+                    this.velocity.y = 0;
+                    camera.position.y = this.height;
+                    this.onGround = true;
+                    canJump = true; // Allow jump flag reset when on ground
+                } else {
+                    this.onGround = false;
+                }
+            }
+
+            jump() {
+                if (canJump === true && this.onGround) {
+                     this.velocity.y += playerConfig.jumpHeight; // Adjust force as needed
+                     canJump = false; // Prevent multi-jump until grounded again
+                     this.onGround = false;
+                }
+            }
+
+             getPosition() {
+                return camera.position;
+             }
+        }
+
+        class World {
+            constructor() {
+                this.objects = []; // Keep track of world objects like trees, rocks etc.
+            }
+
+            createGround() {
+                const groundGeometry = new THREE.PlaneGeometry(worldConfig.groundSize, worldConfig.groundSize);
+                const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22, side: THREE.DoubleSide }); // Green
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2; // Rotate to be flat
+                ground.receiveShadow = true;
+                ground.userData = { type: 'ground' }; // Identify the ground for placement
+                scene.add(ground);
+                this.objects.push(ground); // Add to world objects if needed for checks
+            }
+
+            populate() {
+                // Trees (Simple Cones)
+                const treeGeometry = new THREE.ConeGeometry(1, 4, 8);
+                const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x006400 }); // Dark Green
+                const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.3, 2, 8);
+                const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
+
+                for (let i = 0; i < worldConfig.numTrees; i++) {
+                    const treeGroup = new THREE.Group();
+                    const foliage = new THREE.Mesh(treeGeometry, treeMaterial);
+                    foliage.position.y = 2 + 2; // Trunk height + half foliage height
+                    foliage.castShadow = true;
+                    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                    trunk.position.y = 1; // Half trunk height
+                    trunk.castShadow = true;
+                    treeGroup.add(foliage);
+                    treeGroup.add(trunk);
+
+                    treeGroup.position.x = (Math.random() - 0.5) * worldConfig.groundSize * 0.9;
+                    treeGroup.position.z = (Math.random() - 0.5) * worldConfig.groundSize * 0.9;
+                    treeGroup.position.y = 0; // Base on the ground
+
+                    treeGroup.userData = { type: 'tree', harvestable: true, resource: 'wood', amount: 5 + Math.floor(Math.random() * 6), health: 100 };
+                    scene.add(treeGroup);
+                    interactableObjects.push(treeGroup); // Make trees interactable
+                    this.objects.push(treeGroup);
+                }
+
+                // Rocks (Simple Icosahedrons)
+                const rockGeometry = new THREE.IcosahedronGeometry(0.8 + Math.random() * 0.7, 0); // Basic rock shape
+                const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 }); // Grey
+                for (let i = 0; i < worldConfig.numRocks; i++) {
+                     const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+                     rock.position.x = (Math.random() - 0.5) * worldConfig.groundSize * 0.9;
+                     rock.position.z = (Math.random() - 0.5) * worldConfig.groundSize * 0.9;
+                     rock.position.y = 0.5; // Slightly above ground
+                     rock.castShadow = true;
+                     rock.receiveShadow = true;
+                     rock.userData = { type: 'rock', harvestable: true, resource: 'stone', amount: 3 + Math.floor(Math.random() * 5), health: 150 };
+                     scene.add(rock);
+                     interactableObjects.push(rock);
+                     this.objects.push(rock);
+                }
+
+                 // Barrels (Simple Cylinders)
+                const barrelGeometry = new THREE.CylinderGeometry(0.6, 0.6, 1, 16);
+                const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0xA0522D }); // Sienna
+                for (let i = 0; i < worldConfig.numBarrels; i++) {
+                    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+                    barrel.position.x = (Math.random() - 0.5) * worldConfig.groundSize * 0.8;
+                    barrel.position.z = (Math.random() - 0.5) * worldConfig.groundSize * 0.8;
+                    barrel.position.y = 0.5; // Half height
+                    barrel.castShadow = true;
+                    barrel.userData = { type: 'barrel', lootable: true, looted: false, lootTable: ['scrap_metal', 'nails', 'cloth', 'empty_can'] }; // Example loot
+                    scene.add(barrel);
+                    interactableObjects.push(barrel);
+                    this.objects.push(barrel);
+                }
+
+                // Water (Simple Plane - visual only for now)
+                const waterGeometry = new THREE.PlaneGeometry(worldConfig.groundSize * 0.3, worldConfig.groundSize * 0.3);
+                const waterMaterial = new THREE.MeshStandardMaterial({ color: 0x0077BE, transparent: true, opacity: 0.7 });
+                const water = new THREE.Mesh(waterGeometry, waterMaterial);
+                water.rotation.x = -Math.PI / 2;
+                water.position.y = -0.1; // Slightly below ground level
+                water.position.x = worldConfig.groundSize * 0.25; // Place it somewhere
+                water.userData = { type: 'water_source', harvestable: true, resource: 'dirty_water' };
+                scene.add(water);
+                interactableObjects.push(water); // Allow interaction
+                this.objects.push(water);
+
+
+                // TODO: Add Empty Buildings (Groups of simple BoxGeometry meshes)
+                console.warn("TODO: Implement building generation");
+
+                 // TODO: Add Animals (e.g., simple spheres or cubes for now)
+                 const animalGeometry = new THREE.SphereGeometry(0.5, 16, 8);
+                 const animalMaterial = new THREE.MeshStandardMaterial({color: 0xFF8C00}); // Orange placeholder
+                 for(let i=0; i< worldConfig.numAnimals; i++) {
+                    const animal = new THREE.Mesh(animalGeometry, animalMaterial);
+                    animal.position.x = (Math.random() - 0.5) * worldConfig.groundSize * 0.7;
+                    animal.position.z = (Math.random() - 0.5) * worldConfig.groundSize * 0.7;
+                    animal.position.y = 0.5;
+                    animal.castShadow = true;
+                    animal.userData = { type: 'animal', health: 50, speed: 0.5 + Math.random() * 1, loot: { meat: 2, leather: 1, fat: 1 } };
+                    scene.add(animal);
+                    interactableObjects.push(animal); // Make them targetable/interactable
+                    animals.push(animal); // Add to separate list for AI updates
+                    this.objects.push(animal);
+                 }
+            }
+
+            updateAnimals(delta) {
+                animals.forEach(animal => {
+                    // Very basic random wandering AI
+                    if (Math.random() < 0.01) { // Change direction occasionally
+                       animal.userData.wanderAngle = Math.random() * Math.PI * 2;
+                    }
+                    if (animal.userData.wanderAngle !== undefined) {
+                        const moveSpeed = animal.userData.speed * delta;
+                        animal.position.x += Math.cos(animal.userData.wanderAngle) * moveSpeed;
+                        animal.position.z += Math.sin(animal.userData.wanderAngle) * moveSpeed;
+
+                        // Keep within bounds (simple)
+                         animal.position.x = Math.max(-worldConfig.groundSize/2, Math.min(worldConfig.groundSize/2, animal.position.x));
+                         animal.position.z = Math.max(-worldConfig.groundSize/2, Math.min(worldConfig.groundSize/2, animal.position.z));
+                         animal.position.y = 0.5; // Keep on ground
+                    } else {
+                         animal.userData.wanderAngle = Math.random() * Math.PI * 2; // Initial angle
+                    }
+                });
+            }
+
+            removeObject(object) {
+                // Remove from scene
+                scene.remove(object);
+
+                // Remove from interactable list
+                const interactableIndex = interactableObjects.indexOf(object);
+                if (interactableIndex > -1) {
+                    interactableObjects.splice(interactableIndex, 1);
+                }
+
+                 // Remove from animals list if it's an animal
+                 const animalIndex = animals.indexOf(object);
+                 if (animalIndex > -1) {
+                     animals.splice(animalIndex, 1);
+                 }
+
+                // Remove from world objects list
+                const worldIndex = this.objects.indexOf(object);
+                if (worldIndex > -1) {
+                    this.objects.splice(worldIndex, 1);
+                }
+
+                // TODO: Dispose geometries/materials if needed for memory management
+            }
+        }
+
+        class InventoryManager {
+            constructor() {
+                this.inventory = new Array(inventorySize).fill(null); // { item: 'wood', quantity: 10 }
+                this.quickBar = new Array(quickBarSize).fill(null);
+                this.selectedQuickSlot = 0; // Index from 0 to quickBarSize - 1
+            }
+
+            // Finds the first available slot (inventory or quickbar) or stacks
+            addItem(item, quantity = 1) {
+                console.log(`Attempting to add ${quantity} ${item}`);
+                // 1. Try to stack in quick bar
+                for (let i = 0; i < this.quickBar.length; i++) {
+                    if (this.quickBar[i] && this.quickBar[i].item === item) {
+                        this.quickBar[i].quantity += quantity;
+                         console.log(`Stacked ${item} in quick slot ${i}. New quantity: ${this.quickBar[i].quantity}`);
+                        uiManager.updateQuickBarDisplay();
+                        return true;
+                    }
+                }
+                // 2. Try to stack in inventory
+                 for (let i = 0; i < this.inventory.length; i++) {
+                    if (this.inventory[i] && this.inventory[i].item === item) {
+                        this.inventory[i].quantity += quantity;
+                         console.log(`Stacked ${item} in inventory slot ${i}. New quantity: ${this.inventory[i].quantity}`);
+                        uiManager.updateInventoryDisplay(); // Update if inventory is open
+                        return true;
+                    }
+                }
+
+                // 3. Find first empty quick bar slot
+                const quickSlotIndex = this.quickBar.findIndex(slot => slot === null);
+                if (quickSlotIndex !== -1) {
+                    this.quickBar[quickSlotIndex] = { item, quantity };
+                    console.log(`Added ${item} to quick slot ${quickSlotIndex}`);
+                    uiManager.updateQuickBarDisplay();
+                    return true;
+                }
+
+                 // 4. Find first empty inventory slot
+                const inventorySlotIndex = this.inventory.findIndex(slot => slot === null);
+                if (inventorySlotIndex !== -1) {
+                    this.inventory[inventorySlotIndex] = { item, quantity };
+                    console.log(`Added ${item} to inventory slot ${inventorySlotIndex}`);
+                    uiManager.updateInventoryDisplay(); // Update if inventory is open
+                    return true;
+                }
+
+                console.warn("Inventory and Quick Bar full. Cannot add item:", item);
+                return false; // Inventory full
+            }
+
+            // Removes a specific quantity of an item, searching quick bar then inventory
+            removeItem(item, quantity = 1) {
+                 let remainingToRemove = quantity;
+
+                 // Search quick bar first
+                 for (let i = 0; i < this.quickBar.length; i++) {
+                     if (remainingToRemove <= 0) break;
+                     if (this.quickBar[i] && this.quickBar[i].item === item) {
+                         const canRemove = Math.min(remainingToRemove, this.quickBar[i].quantity);
+                         this.quickBar[i].quantity -= canRemove;
+                         remainingToRemove -= canRemove;
+                         if (this.quickBar[i].quantity <= 0) {
+                             this.quickBar[i] = null; // Clear slot
+                         }
+                     }
+                 }
+
+                 // Search inventory if needed
+                 if (remainingToRemove > 0) {
+                     for (let i = 0; i < this.inventory.length; i++) {
+                         if (remainingToRemove <= 0) break;
+                         if (this.inventory[i] && this.inventory[i].item === item) {
+                             const canRemove = Math.min(remainingToRemove, this.inventory[i].quantity);
+                             this.inventory[i].quantity -= canRemove;
+                             remainingToRemove -= canRemove;
+                             if (this.inventory[i].quantity <= 0) {
+                                 this.inventory[i] = null; // Clear slot
+                             }
+                         }
+                     }
+                 }
+
+                 uiManager.updateQuickBarDisplay();
+                 uiManager.updateInventoryDisplay();
+
+                 return remainingToRemove <= 0; // Return true if all were removed
+            }
+
+             // Gets the total count of a specific item across inventory and quick bar
+            getItemCount(item) {
+                let count = 0;
+                this.inventory.forEach(slot => {
+                    if (slot && slot.item === item) count += slot.quantity;
+                });
+                this.quickBar.forEach(slot => {
+                    if (slot && slot.item === item) count += slot.quantity;
+                });
+                return count;
+            }
+
+            // Checks if player has enough resources for a recipe {resource1: amount1, resource2: amount2}
+             hasResources(recipe) {
+                 for (const resource in recipe) {
+                     if (this.getItemCount(resource) < recipe[resource]) {
+                         return false; // Not enough of this resource
+                     }
+                 }
+                 return true; // Has all required resources
+             }
+
+             // Consumes resources based on a recipe
+             consumeResources(recipe) {
+                if (!this.hasResources(recipe)) return false; // Double check
+
+                for (const resource in recipe) {
+                    this.removeItem(resource, recipe[resource]);
+                }
+                return true;
+             }
+
+            selectQuickSlot(index) {
+                 if (index >= 0 && index < this.quickBar.length) {
+                     this.selectedQuickSlot = index;
+                     console.log("Selected quick slot:", index + 1);
+                     uiManager.updateQuickBarDisplay(); // Update visuals
+                      // If the selected item is placeable, enter placement mode
+                      const selectedItem = this.quickBar[this.selectedQuickSlot];
+                      if (selectedItem && craftingManager.isPlaceable(selectedItem.item)) {
+                           buildingManager.startPlacing(selectedItem.item);
+                      } else {
+                           buildingManager.cancelPlacing(); // Cancel if switching to a non-placeable item
+                      }
+                 }
+             }
+
+             getSelectedItem() {
+                return this.quickBar[this.selectedQuickSlot];
+             }
+
+            // Basic drag-and-drop logic (needs refinement for robust UI interaction)
+            moveItem(fromType, fromIndex, toType, toIndex) {
+                let fromArr = fromType === 'inventory' ? this.inventory : this.quickBar;
+                let toArr = toType === 'inventory' ? this.inventory : this.quickBar;
+
+                if (fromIndex < 0 || fromIndex >= fromArr.length || toIndex < 0 || toIndex >= toArr.length) {
+                     console.error("Invalid move indices");
+                     return;
+                }
+
+                let itemToMove = fromArr[fromIndex];
+                if (!itemToMove) return; // Trying to move empty slot
+
+                let targetItem = toArr[toIndex];
+
+                // Simple swap logic (doesn't handle stacking for now)
+                // TODO: Implement stacking logic when moving items
+                if (targetItem && targetItem.item === itemToMove.item) {
+                    console.warn("TODO: Implement item stacking on move");
+                     // Simple swap for now
+                    toArr[toIndex] = itemToMove;
+                    fromArr[fromIndex] = targetItem;
+                } else {
+                    // Swap slots
+                    toArr[toIndex] = itemToMove;
+                    fromArr[fromIndex] = targetItem; // Could be null
+                }
+
+
+                console.log(`Moved item from ${fromType}[${fromIndex}] to ${toType}[${toIndex}]`);
+                uiManager.updateInventoryDisplay();
+                uiManager.updateQuickBarDisplay();
+            }
+        }
+
+        class CraftingManager {
+            constructor() {
+                 // Define recipes: { craftableItem: { requiredResource1: amount, ... } }
+                 this.recipes = {
+                     'axe': { 'wood': 3, 'stone': 2 },
+                     'pickaxe': { 'wood': 3, 'stone': 3 },
+                     'campfire': { 'wood': 5, 'stone': 5 },
+                     'foundation': { 'wood': 10 },
+                     'wall': { 'wood': 8 },
+                     'wall_window': { 'wood': 7 }, // Slightly less wood
+                     'wall_doorway': { 'wood': 7 },
+                     'door': { 'wood': 4, 'scrap_metal': 1 },
+                     'roof': { 'wood': 6 },
+                     'knife': { 'wood': 1, 'stone': 1 },
+                     'canteen': { 'scrap_metal': 2, 'leather': 1 },
+                     'crafting_table': { 'wood': 15, 'nails': 4 },
+                     'forge': { 'stone': 20, 'clay': 10 } // Assume clay is found or crafted
+                     // Add more recipes...
+                 };
+                 this.placeableItems = ['foundation', 'wall', 'wall_window', 'wall_doorway', 'door', 'roof', 'campfire', 'crafting_table', 'forge'];
+            }
+
+             getAvailableRecipes() {
+                // Could add logic here to only show recipes based on proximity to crafting stations
+                return this.recipes;
+             }
+
+            canCraft(itemName) {
+                const recipe = this.recipes[itemName];
+                if (!recipe) return false; // Item not craftable
+
+                // Check proximity to required station (if any) - TODO
+                // if (itemName === 'some_advanced_item' && !isNearCraftingTable()) return false;
+
+                return inventoryManager.hasResources(recipe);
+            }
+
+            craftItem(itemName) {
+                if (!this.canCraft(itemName)) {
+                    console.log(`Cannot craft ${itemName}, missing resources.`);
+                    return false;
+                }
+
+                const recipe = this.recipes[itemName];
+                if (inventoryManager.consumeResources(recipe)) {
+                    console.log(`Crafted ${itemName}!`);
+                    inventoryManager.addItem(itemName, 1); // Add the crafted item
+                    uiManager.updateBuildMenu(); // Update UI to reflect resource changes
+                    return true;
+                } else {
+                    console.error(`Failed to consume resources for ${itemName} even after check.`);
+                    return false;
+                }
+            }
+
+             isPlaceable(itemName) {
+                return this.placeableItems.includes(itemName);
+             }
+        }
+
+        class BuildingManager {
+            constructor() {
+                this.placingItemName = null;
+                this.ghostMesh = null; // The transparent preview mesh
+                this.isValidPlacement = false;
+                this.placementRotation = 0; // Store rotation (Y-axis)
+                this.placedStructures = []; // Keep track of placed build items
+            }
+
+             // Called when a placeable item is selected in the quickbar
+            startPlacing(itemName) {
+                if (!craftingManager.isPlaceable(itemName)) return;
+
+                this.cancelPlacing(); // Clear any previous placement state
+
+                this.placingItemName = itemName;
+                console.log("Entering placement mode for:", itemName);
+
+                // Create a ghost mesh based on the item
+                // TODO: Use actual models instead of simple boxes/planes
+                 let geometry;
+                 let material = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, side: THREE.DoubleSide }); // Green, transparent
+
+                switch(itemName) {
+                    case 'foundation':
+                        geometry = new THREE.BoxGeometry(buildGridSize, 0.2, buildGridSize);
+                        break;
+                    case 'wall':
+                    case 'wall_window':
+                    case 'wall_doorway':
+                         geometry = new THREE.BoxGeometry(buildGridSize, 3, 0.2); // Width, Height, Depth
+                         break;
+                     case 'roof':
+                         geometry = new THREE.PlaneGeometry(buildGridSize, buildGridSize);
+                         break;
+                     case 'campfire':
+                         geometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 16);
+                         break;
+                    // Add cases for other placeable items
+                    default:
+                        console.warn("No ghost mesh defined for:", itemName);
+                        geometry = new THREE.BoxGeometry(1, 1, 1); // Default cube
+                }
+
+                this.ghostMesh = new THREE.Mesh(geometry, material);
+                this.ghostMesh.userData.isGhost = true; // Mark it as ghost
+                scene.add(this.ghostMesh);
+                playerIsPlacing = true; // Global flag
+             }
+
+             updatePlacement() {
+                if (!playerIsPlacing || !this.ghostMesh) return;
+
+                raycaster.setFromCamera({ x: 0, y: 0 }, camera); // Raycast from center of screen
+
+                // Intersect with ground and existing placed structures
+                 const intersects = raycaster.intersectObjects(world.objects.concat(this.placedStructures), false); // Don't check children recursively for groups yet
+
+                 this.isValidPlacement = false; // Assume invalid until proven otherwise
+                 let placementPoint = null;
+
+                 if (intersects.length > 0) {
+                    let intersect = intersects[0]; // Closest intersection
+
+                     // Find the first non-ghost object hit
+                     for(let i=0; i<intersects.length; i++){
+                        if(!intersects[i].object.userData.isGhost){
+                             intersect = intersects[i];
+                             break;
+                        }
+                     }
+
+                    // --- Placement Logic ---
+                    placementPoint = intersect.point.clone();
+                    const targetObject = intersect.object;
+                    const targetType = targetObject.userData.type;
+
+
+                    // --- Snapping and Placement Rules ---
+                    let snapToBase = false;
+                    let targetPosition = null;
+
+                    // Rule 1: Foundations can only be placed on 'ground'
+                    if (this.placingItemName === 'foundation') {
+                        if (targetType === 'ground') {
+                             snapToBase = true;
+                             targetPosition = placementPoint;
+                             this.isValidPlacement = true;
+                        } else {
+                            this.isValidPlacement = false;
+                        }
+                    }
+                    // Rule 2: Walls, Doors, etc. snap to Foundations or other Walls
+                    else if (['wall', 'wall_window', 'wall_doorway', 'door'].includes(this.placingItemName)) {
+                         if (targetType === 'foundation' || targetType === 'wall') { // Allow snapping to foundations or other walls
+                             // Snap to the EDGES of the target foundation/wall
+                             // This requires more complex logic: determine which edge is closest
+                             // For simplicity here, just snap to the center of the target object's top edge
+                             snapToBase = true;
+                             targetPosition = targetObject.position.clone(); // Start with target center
+                             targetPosition.y += targetObject.geometry.parameters.height / 2; // Top of foundation/wall
+                              // Align the ghost mesh's position based on snapping (simplified - center snap)
+                              targetPosition.y += this.ghostMesh.geometry.parameters.height / 2; // Place base of wall on top
+
+                             // Basic edge snapping idea (needs refinement)
+                             // Calculate offsets based on grid size and player view direction
+                             const offset = new THREE.Vector3(buildGridSize / 2, 0, buildGridSize / 2); // Adjust based on orientation
+                              // Add logic here to determine closest edge/corner based on intersect.point and targetObject bounds
+
+                             this.isValidPlacement = true; // Assume valid if on foundation/wall for now
+                         } else {
+                              this.isValidPlacement = false;
+                         }
+                    }
+                    // Rule 3: Campfire, Forge, Crafting Table on Foundations or Ground
+                     else if (['campfire', 'crafting_table', 'forge'].includes(this.placingItemName)) {
+                         if (targetType === 'ground' || targetType === 'foundation') {
+                            snapToBase = true;
+                            targetPosition = placementPoint;
+                            // Adjust Y position so base is on the surface
+                             targetPosition.y += this.ghostMesh.geometry.parameters.height ? this.ghostMesh.geometry.parameters.height / 2 : 0.1; // Raise slightly
+                             this.isValidPlacement = true;
+                         } else {
+                             this.isValidPlacement = false;
+                         }
+                    }
+                    // Add rules for roofs, etc.
+
+                    // --- Position Ghost Mesh ---
+                    if (snapToBase && targetPosition) {
+                        // Apply grid snapping
+                         this.ghostMesh.position.x = Math.round(targetPosition.x / buildGridSize) * buildGridSize;
+                         this.ghostMesh.position.z = Math.round(targetPosition.z / buildGridSize) * buildGridSize;
+                         this.ghostMesh.position.y = targetPosition.y; // Use calculated Y
+
+                         // Apply rotation (Y-axis only for simplicity)
+                         this.ghostMesh.rotation.y = this.placementRotation;
+
+                         // TODO: Add collision check with other placed objects/world items
+                         if (this.checkCollision(this.ghostMesh)) {
+                             this.isValidPlacement = false;
+                         }
+
+                    } else {
+                        // If not snapping or on invalid surface, maybe just follow the raycast point
+                        this.ghostMesh.position.copy(placementPoint);
+                         this.isValidPlacement = false; // Cannot place floating in air usually
+                    }
+
+                 } else {
+                    this.isValidPlacement = false; // Hit nothing within range
+                     if(this.ghostMesh) this.ghostMesh.position.set(0,-1000,0); // Hide if not pointing at anything valid
+                 }
+
+                 // Update ghost mesh color based on validity
+                 if (this.ghostMesh) {
+                    this.ghostMesh.material.color.set(this.isValidPlacement ? 0x00ff00 : 0xff0000); // Green if valid, Red if not
+                 }
+            }
+
+            // Called on right-click when placing
+            confirmPlacement() {
+                 if (!playerIsPlacing || !this.isValidPlacement || !this.placingItemName) return;
+
+                 console.log(`Placing ${this.placingItemName} at`, this.ghostMesh.position);
+
+                 // 1. Consume the item from inventory/quick bar
+                 if (!inventoryManager.removeItem(this.placingItemName, 1)) {
+                     console.error("Failed to place: Item not found in inventory (shouldn't happen if placement started)");
+                     this.cancelPlacing();
+                     return;
+                 }
+
+                 // 2. Create the actual object
+                  // TODO: Use proper models and materials
+                 const placedGeometry = this.ghostMesh.geometry.clone();
+                 const placedMaterial = new THREE.MeshStandardMaterial({ color: this.getPlacedItemColor(this.placingItemName) }); // Use appropriate color/texture
+                 const placedObject = new THREE.Mesh(placedGeometry, placedMaterial);
+
+                 placedObject.position.copy(this.ghostMesh.position);
+                 placedObject.rotation.copy(this.ghostMesh.rotation);
+                 placedObject.castShadow = true;
+                 placedObject.receiveShadow = true;
+                 placedObject.userData = { type: this.placingItemName }; // Set type for future interactions/snapping
+
+                 scene.add(placedObject);
+                 this.placedStructures.push(placedObject); // Add to list of structures
+                 interactableObjects.push(placedObject); // Allow interaction if needed (e.g., doors, campfires)
+
+                 // 3. Optionally, exit placement mode or allow placing more of the same item
+                 // For now, exit placement mode after one placement
+                  // this.cancelPlacing(); // Uncomment to exit placement after each build
+                  // Keep placing mode active, just consume item. User must switch quickslot or press ESC to stop.
+
+                 // If we run out of the item, stop placing
+                 if (inventoryManager.getItemCount(this.placingItemName) <= 0) {
+                     console.log(`Ran out of ${this.placingItemName}.`);
+                     this.cancelPlacing();
+                 }
+            }
+
+             cancelPlacing() {
+                 if (this.ghostMesh) {
+                    scene.remove(this.ghostMesh);
+                    // TODO: Properly dispose geometry/material if necessary
+                    this.ghostMesh = null;
+                 }
+                 this.placingItemName = null;
+                 this.isValidPlacement = false;
+                 playerIsPlacing = false;
+                 console.log("Exited placement mode.");
+             }
+
+            // Basic collision check (AABB - Axis-Aligned Bounding Box)
+            // Needs improvement for rotated objects
+            checkCollision(objectToCheck) {
+                 const checkBB = new THREE.Box3().setFromObject(objectToCheck);
+                 const structuresToCheck = this.placedStructures.concat(interactableObjects); // Check against placed things and world items
+
+                 for(const obj of structuresToCheck) {
+                     if (obj === objectToCheck || obj.userData.isGhost || obj.userData.type === 'ground' || obj.userData.type === 'water_source') continue; // Don't check against self, ghosts, or ground
+
+                     const objBB = new THREE.Box3().setFromObject(obj);
+                     if (checkBB.intersectsBox(objBB)) {
+                          console.log("Placement collision detected with:", obj.userData.type || obj);
+                          return true; // Collision detected
+                     }
+                 }
+                 return false; // No collision
+            }
+
+             // Helper to get color based on item type (replace with textures/models later)
+             getPlacedItemColor(itemName) {
+                 switch(itemName) {
+                     case 'foundation': return 0xaaaaaa; // Light grey
+                     case 'wall':
+                     case 'wall_window':
+                     case 'wall_doorway':
+                     case 'door':
+                     case 'roof':
+                          return 0xD2B48C; // Tan (wood color)
+                     case 'campfire': return 0x505050; // Dark grey
+                     default: return 0xffffff; // White
+                 }
+             }
+        }
+
+
+        class UIManager {
+            constructor() {
+                this.inventoryPanel = document.getElementById('inventory-panel');
+                this.inventoryGrid = document.getElementById('inventory-grid');
+                this.quickBarElement = document.getElementById('quick-bar');
+                this.buildMenuPanel = document.getElementById('build-menu');
+                this.buildOptionsList = document.getElementById('build-options-list');
+                this.interactionPrompt = document.getElementById('interaction-prompt');
+                this.startScreen = document.getElementById('start-screen');
+                this.blocker = document.getElementById('blocker');
+                this.instructions = document.getElementById('instructions');
+                this.isInventoryOpen = false;
+                this.isBuildMenuOpen = false;
+
+                // Drag and drop state
+                 this.draggedItemElement = null;
+                 this.draggedItemData = null; // { type: 'inventory'/'quickbar', index: number }
+            }
+
+            init() {
+                // Setup initial UI state
+                this.updateQuickBarDisplay();
+                this.updateInventoryDisplay(); // Create slots even if hidden
+                this.updateBuildMenu();
+                 this.setupDragAndDrop();
+            }
+
+            toggleInventory() {
+                this.isInventoryOpen = !this.isInventoryOpen;
+                this.inventoryPanel.classList.toggle('hidden', !this.isInventoryOpen);
+                if (this.isInventoryOpen) {
+                    this.updateInventoryDisplay(); // Refresh content when opening
+                    // If inventory opens, usually unlock mouse and show cursor
+                    controls.unlock();
+                    this.hideInteractionPrompt(); // Hide interaction prompt when menu is open
+                    this.closeBuildMenu(); // Close build menu if open
+                } else {
+                     // If game is active (not paused), lock mouse gain
+                    if(!this.startScreen.classList.contains('hidden')) { // Don't lock if start screen still visible
+                         // Only lock if blocker isn't showing instructions
+                         if(this.blocker.classList.contains('hidden')) {
+                              controls.lock();
+                         }
+                    }
+                }
+            }
+
+             closeInventory() {
+                if(this.isInventoryOpen) this.toggleInventory();
+             }
+
+            toggleBuildMenu() {
+                this.isBuildMenuOpen = !this.isBuildMenuOpen;
+                this.buildMenuPanel.classList.toggle('hidden', !this.isBuildMenuOpen);
+                 if (this.isBuildMenuOpen) {
+                    this.updateBuildMenu(); // Refresh content
+                    controls.unlock();
+                     this.hideInteractionPrompt();
+                     this.closeInventory(); // Close inventory if open
+                } else {
+                     if(!this.startScreen.classList.contains('hidden')) {
+                         if(this.blocker.classList.contains('hidden')) {
+                              controls.lock();
+                         }
+                    }
+                }
+            }
+
+             closeBuildMenu() {
+                 if(this.isBuildMenuOpen) this.toggleBuildMenu();
+             }
+
+            updateQuickBarDisplay() {
+                this.quickBarElement.innerHTML = ''; // Clear existing slots
+                for (let i = 0; i < quickBarSize; i++) {
+                    const slot = document.createElement('div');
+                    slot.classList.add('quick-slot');
+                    slot.dataset.index = i; // Store index
+                     slot.dataset.type = 'quickbar'; // Identify as quickbar slot
+
+                    if (i === inventoryManager.selectedQuickSlot) {
+                        slot.classList.add('selected');
+                    }
+
+                    const itemData = inventoryManager.quickBar[i];
+                    if (itemData) {
+                        slot.textContent = itemData.item.substring(0, 4); // Display first few letters
+                        slot.title = `${itemData.item} (${itemData.quantity})`; // Tooltip
+
+                         // Add quantity display
+                        const countSpan = document.createElement('span');
+                        countSpan.classList.add('item-count');
+                        countSpan.textContent = itemData.quantity;
+                        slot.appendChild(countSpan);
+
+                         // Make draggable
+                         slot.draggable = true;
+                    } else {
+                        slot.title = `Quick Slot ${i + 1}`;
+                         slot.textContent = `[${i+1}]`;
+                    }
+                    this.quickBarElement.appendChild(slot);
+                }
+                 this.addDropListeners(this.quickBarElement.querySelectorAll('.quick-slot'));
+            }
+
+             updateInventoryDisplay() {
+                this.inventoryGrid.innerHTML = ''; // Clear existing slots
+                for (let i = 0; i < inventorySize; i++) {
+                    const slot = document.createElement('div');
+                    slot.classList.add('inventory-slot');
+                    slot.dataset.index = i; // Store index
+                    slot.dataset.type = 'inventory'; // Identify as inventory slot
+
+                    const itemData = inventoryManager.inventory[i];
+                    if (itemData) {
+                        slot.textContent = itemData.item.substring(0, 6);
+                        slot.title = `${itemData.item} (${itemData.quantity})`;
+
+                         // Add quantity display
+                        const countSpan = document.createElement('span');
+                        countSpan.classList.add('item-count');
+                        countSpan.textContent = itemData.quantity;
+                        slot.appendChild(countSpan);
+
+                        // Make draggable
+                         slot.draggable = true;
+                    } else {
+                         slot.title = `Inventory Slot`;
+                    }
+                    this.inventoryGrid.appendChild(slot);
+                }
+                 this.addDropListeners(this.inventoryGrid.querySelectorAll('.inventory-slot'));
+            }
+
+            updateBuildMenu() {
+                if (!craftingManager) return; // Make sure manager exists
+
+                this.buildOptionsList.innerHTML = ''; // Clear existing list
+                const recipes = craftingManager.getAvailableRecipes();
+
+                for (const itemName in recipes) {
+                    const recipe = recipes[itemName];
+                    const listItem = document.createElement('li');
+
+                    let requirementsString = Object.entries(recipe)
+                        .map(([res, quant]) => `${res}: ${quant}`)
+                        .join(', ');
+
+                    listItem.textContent = `${itemName} (Requires: ${requirementsString}) `;
+
+                    const craftButton = document.createElement('button');
+                    craftButton.textContent = 'Craft';
+                    craftButton.disabled = !craftingManager.canCraft(itemName);
+                    craftButton.onclick = () => {
+                        craftingManager.craftItem(itemName);
+                        // No need to update UI here, craftItem calls inventory update which calls UI update
+                    };
+
+                    listItem.appendChild(craftButton);
+                    this.buildOptionsList.appendChild(listItem);
+                }
+            }
+
+             // --- Drag and Drop Handling ---
+            setupDragAndDrop() {
+                 // Need to add listeners AFTER elements are created
+                 // Called from init() and update displays
+            }
+
+            addDragListeners(element) {
+                 element.addEventListener('dragstart', (event) => {
+                    // Only allow dragging if there's an item in the slot
+                     const itemContent = event.target.textContent.trim();
+                     const hasItem = itemContent && !itemContent.startsWith('['); // Check if not just the slot number
+                     if (hasItem && event.target.classList.contains('inventory-slot') || event.target.classList.contains('quick-slot')) {
+                         this.draggedItemElement = event.target;
+                         this.draggedItemData = {
+                             type: event.target.dataset.type,
+                             index: parseInt(event.target.dataset.index)
+                         };
+                         event.target.classList.add('dragging');
+                         event.dataTransfer.effectAllowed = 'move';
+                          // Optional: Set data for external drop (though not used here)
+                         // event.dataTransfer.setData('text/plain', JSON.stringify(this.draggedItemData));
+                     } else {
+                         event.preventDefault(); // Prevent dragging empty slots
+                     }
+                 });
+
+                 element.addEventListener('dragend', (event) => {
+                     if (this.draggedItemElement) {
+                         this.draggedItemElement.classList.remove('dragging');
+                     }
+                     this.draggedItemElement = null;
+                     this.draggedItemData = null;
+                 });
+            }
+
+            addDropListeners(elements) {
+                 elements.forEach(element => {
+                     // Necessary to allow dropping
+                     element.addEventListener('dragover', (event) => {
+                         event.preventDefault();
+                         event.dataTransfer.dropEffect = 'move';
+                     });
+
+                     element.addEventListener('drop', (event) => {
+                         event.preventDefault();
+                         if (this.draggedItemData && (event.target.classList.contains('inventory-slot') || event.target.classList.contains('quick-slot'))) {
+                             const targetData = {
+                                 type: event.target.dataset.type,
+                                 index: parseInt(event.target.dataset.index)
+                             };
+
+                             // Prevent dropping onto itself
+                             if (this.draggedItemData.type === targetData.type && this.draggedItemData.index === targetData.index) {
+                                 return;
+                             }
+
+                             inventoryManager.moveItem(
+                                 this.draggedItemData.type,
+                                 this.draggedItemData.index,
+                                 targetData.type,
+                                 targetData.index
+                             );
+                         }
+                     });
+
+                     // Add drag listeners here too, as elements are recreated
+                      this.addDragListeners(element);
+                 });
+            }
+
+             showInteractionPrompt(text) {
+                 // Don't show if a menu is open
+                if (this.isInventoryOpen || this.isBuildMenuOpen) return;
+
+                this.interactionPrompt.textContent = text;
+                this.interactionPrompt.classList.remove('hidden');
+             }
+
+             hideInteractionPrompt() {
+                this.interactionPrompt.classList.add('hidden');
+             }
+
+             hideStartScreen() {
+                this.startScreen.classList.add('hidden');
+             }
+
+             showBlocker(showInstructions = true) {
+                 this.blocker.style.display = 'flex';
+                 this.instructions.style.display = showInstructions ? 'block' : 'none';
+             }
+
+             hideBlocker() {
+                 this.blocker.style.display = 'none';
+             }
+        }
+
+        // --- Initialization ---
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            scene.fog = new THREE.Fog(0x87CEEB, 0, worldConfig.groundSize * 0.6); // Add fog
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.y = playerConfig.height; // Set initial height
+
+            // Renderer
+            const gameContainer = document.getElementById('game-container');
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+            gameContainer.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Soft white light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 100, 50); // Position the light source
+            directionalLight.castShadow = true;
+            // Configure shadow properties
+            directionalLight.shadow.mapSize.width = 2048; // Higher resolution shadows
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            directionalLight.shadow.camera.left = -worldConfig.groundSize / 2;
+            directionalLight.shadow.camera.right = worldConfig.groundSize / 2;
+            directionalLight.shadow.camera.top = worldConfig.groundSize / 2;
+            directionalLight.shadow.camera.bottom = -worldConfig.groundSize / 2;
+
+            scene.add(directionalLight);
+            // Optional: Add a shadow camera helper for debugging
+            // const shadowHelper = new THREE.CameraHelper(directionalLight.shadow.camera);
+            // scene.add(shadowHelper);
+
+
+            // Controls
+            controls = new PointerLockControls(camera, document.body);
+            scene.add(controls.getObject()); // Add camera holder to scene
+
+             // Blocker / Instructions screen logic
+            const blocker = document.getElementById('blocker');
+            const instructions = document.getElementById('instructions');
+             const startButton = document.getElementById('start-game-button');
+             const startScreenElement = document.getElementById('start-screen');
+
+
+             // --- Start Screen Logic ---
+             startButton.addEventListener('click', () => {
+                 const startWood = parseInt(document.getElementById('start-wood').value) || 0;
+                 const startStone = parseInt(document.getElementById('start-stone').value) || 0;
+                 const playerSpeed = parseFloat(document.getElementById('start-speed').value) || playerConfig.speed;
+                 const playerHeight = parseFloat(document.getElementById('start-height').value) || playerConfig.height;
+
+                 // Apply settings
+                 player.applySettings(playerSpeed, playerHeight);
+
+                 // Add starting resources
+                 if (startWood > 0) inventoryManager.addItem('wood', startWood);
+                 if (startStone > 0) inventoryManager.addItem('stone', startStone);
+
+                 // Add default tools
+                 inventoryManager.addItem('axe', 1);
+                 inventoryManager.addItem('pickaxe', 1);
+                 inventoryManager.addItem('knife', 1);
+                 inventoryManager.addItem('canteen', 1); // Empty canteen
+
+                 // Select first quickslot by default
+                  inventoryManager.selectQuickSlot(0);
+
+                 // Hide start screen and show blocker instructions
+                 startScreenElement.classList.add('hidden');
+                 blocker.style.display = 'flex'; // Show blocker with instructions
+                 instructions.style.display = 'block'; // Ensure instructions are visible
+
+                 // Update UI after adding items
+                  uiManager.updateQuickBarDisplay();
+                  uiManager.updateInventoryDisplay();
+
+             }, { once: true }); // Only allow starting once
+
+
+             blocker.addEventListener('click', function () {
+                if (!startScreenElement.classList.contains('hidden')) return; // Don't lock if start screen is showing
+                controls.lock(); // Lock pointer on click
+             });
+
+             controls.addEventListener('lock', function () {
+                uiManager.hideBlocker();
+                // Close menus when locking cursor
+                 uiManager.closeInventory();
+                 uiManager.closeBuildMenu();
+                 buildingManager.cancelPlacing(); // Cancel placement if menu was closed via lock
+             });
+
+             controls.addEventListener('unlock', function () {
+                // Don't show blocker if a menu is intentionally open
+                 if (!uiManager.isInventoryOpen && !uiManager.isBuildMenuOpen) {
+                    uiManager.showBlocker(true); // Show instructions when mouse is unlocked (e.g. ESC pressed)
+                 }
+                 buildingManager.cancelPlacing(); // Cancel placement when mouse unlocked
+             });
+
+
+            // Game Systems Instantiation
+            inventoryManager = new InventoryManager();
+            craftingManager = new CraftingManager();
+            buildingManager = new BuildingManager();
+            uiManager = new UIManager(); // Needs to be after inventory/crafting
+            world = new World();
+            player = new Player(); // Needs camera to be defined
+
+            // Populate World AFTER player and other managers are set up
+            world.createGround();
+            world.populate(); // Add trees, rocks, etc.
+
+             // Initialize UI elements AFTER managers are created
+             uiManager.init();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            document.addEventListener('keyup', onKeyUp, false);
+            document.addEventListener('click', onMouseClick, false); // For interaction/attack
+            document.addEventListener('contextmenu', onRightClick, false); // For placing items
+
+
+            // Start the game loop
+            animate();
+        }
+
+        // --- Event Handlers ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onKeyDown(event) {
+             // Allow typing in input fields on start screen
+             if (!document.getElementById('start-screen').classList.contains('hidden') && event.target.tagName === 'INPUT') {
+                 return;
+             }
+
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = true; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = true; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = true; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = true; break;
+                case 'Space': player.jump(); break;
+                case 'Tab':
+                    event.preventDefault(); // Prevent tabbing out of the game
+                    uiManager.toggleInventory();
+                    break;
+                 case 'KeyB':
+                    event.preventDefault();
+                    uiManager.toggleBuildMenu();
+                    break;
+                case 'KeyE': interact(); break;
+                case 'Escape':
+                    // If a menu is open, close it first. Otherwise, unlock pointer.
+                     if(uiManager.isInventoryOpen) uiManager.closeInventory();
+                     else if (uiManager.isBuildMenuOpen) uiManager.closeBuildMenu();
+                     else if (playerIsPlacing) buildingManager.cancelPlacing();
+                     else if (controls.isLocked) controls.unlock(); // This will trigger the 'unlock' event listener
+                     break;
+                 // Quick Slot Selection (1-9)
+                 case 'Digit1': inventoryManager.selectQuickSlot(0); break;
+                 case 'Digit2': inventoryManager.selectQuickSlot(1); break;
+                 case 'Digit3': inventoryManager.selectQuickSlot(2); break;
+                 case 'Digit4': inventoryManager.selectQuickSlot(3); break;
+                 case 'Digit5': inventoryManager.selectQuickSlot(4); break;
+                 case 'Digit6': inventoryManager.selectQuickSlot(5); break;
+                 case 'Digit7': inventoryManager.selectQuickSlot(6); break;
+                 case 'Digit8': inventoryManager.selectQuickSlot(7); break;
+                 case 'Digit9': inventoryManager.selectQuickSlot(8); break;
+
+                 // Placement Rotation (Example: Q/E keys)
+                case 'KeyQ': if(playerIsPlacing) buildingManager.placementRotation -= Math.PI / 2; break; // Rotate Left
+                case 'KeyE': if(playerIsPlacing) buildingManager.placementRotation += Math.PI / 2; break; // Rotate Right (re-use E if not interacting)
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = false; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = false; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = false; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = false; break;
+            }
+        }
+
+        function onMouseClick(event) {
+             if (!controls.isLocked) return; // Only act if pointer is locked
+             if (playerIsPlacing) return; // Left click doesn't place, right click does
+
+            // Use item / Attack
+             performAction();
+        }
+
+        function onRightClick(event) {
+             event.preventDefault(); // Prevent context menu
+             if (!controls.isLocked) return;
+
+             if (playerIsPlacing) {
+                buildingManager.confirmPlacement();
+             } else {
+                // Could add alternative action for right click here if needed
+             }
+        }
+
+
+        // --- Game Logic Functions ---
+
+        function checkInteraction() {
+            if (uiManager.isInventoryOpen || uiManager.isBuildMenuOpen || playerIsPlacing) {
+                 uiManager.hideInteractionPrompt();
+                 currentInteractable = null;
+                 return; // Don't interact if UI is open or placing
+            }
+
+            raycaster.setFromCamera({ x: 0, y: 0 }, camera); // Cast from center of screen
+            const intersects = raycaster.intersectObjects(interactableObjects, false); // Check only interactable objects
+
+            let foundInteractable = false;
+            if (intersects.length > 0) {
+                 const firstHit = intersects[0];
+                 // Find the first non-ghost object hit within range
+                 for(let i=0; i<intersects.length; i++){
+                    const hit = intersects[i];
+                    if (hit.distance <= playerConfig.maxInteractionDistance && !hit.object.userData.isGhost && !hit.object.parent?.userData?.isGhost) { // Check parent for grouped objects like trees
+                        const targetObject = hit.object.parent instanceof THREE.Group ? hit.object.parent : hit.object; // Get group if part of one
+
+                         currentInteractable = targetObject; // Store the potential interactable
+                         let promptText = '';
+
+                         switch(targetObject.userData.type) {
+                            case 'tree':
+                                promptText = `[E] Harvest Tree (Health: ${targetObject.userData.health}%)`;
+                                break;
+                            case 'rock':
+                                promptText = `[E] Harvest Rock (Health: ${targetObject.userData.health}%)`;
+                                break;
+                            case 'barrel':
+                                promptText = targetObject.userData.looted ? "Barrel (Empty)" : "[E] Loot Barrel";
+                                break;
+                            case 'water_source':
+                                promptText = "[E] Collect Dirty Water"; // Needs canteen
+                                break;
+                            case 'animal':
+                                promptText = `Animal (Health: ${targetObject.userData.health})`; // Attack with Left Click
+                                break;
+                             case 'campfire':
+                                promptText = "[E] Use Campfire"; // TODO: Implement cooking UI
+                                break;
+                             case 'door':
+                                promptText = "[E] Open/Close Door"; // TODO: Implement door state
+                                break;
+                             // Add cases for crates, buildings, etc.
+                            default:
+                                currentInteractable = null; // Not specifically interactable via E key
+                         }
+
+                         if (currentInteractable) {
+                             uiManager.showInteractionPrompt(promptText);
+                             foundInteractable = true;
+                         }
+                        break; // Stop checking after finding the first valid object in range
+                    }
+                 }
+            }
+
+            if (!foundInteractable) {
+                uiManager.hideInteractionPrompt();
+                currentInteractable = null;
+            }
+        }
+
+         // Triggered by 'E' key
+        function interact() {
+             if (!currentInteractable || uiManager.isInventoryOpen || uiManager.isBuildMenuOpen || playerIsPlacing) return;
+
+             console.log("Interacting with:", currentInteractable.userData.type);
+             const data = currentInteractable.userData;
+
+             switch(data.type) {
+                 case 'tree':
+                     // Handled by performAction (left click with axe)
+                     performAction(currentInteractable); // Try hitting it
+                     break;
+                 case 'rock':
+                      // Handled by performAction (left click with pickaxe)
+                      performAction(currentInteractable); // Try hitting it
+                     break;
+                 case 'barrel':
+                     if (!data.looted) {
+                         console.log("Looting barrel...");
+                         // Give random loot
+                         const lootItem = data.lootTable[Math.floor(Math.random() * data.lootTable.length)];
+                         const lootQuantity = 1 + Math.floor(Math.random() * 3);
+                         if (inventoryManager.addItem(lootItem, lootQuantity)) {
+                             console.log(`Found ${lootQuantity} ${lootItem}`);
+                             data.looted = true;
+                              // Optional: Change barrel appearance or remove it
+                              // currentInteractable.material.color.set(0x555555); // Make it grey
+                         } else {
+                            console.log("Inventory full, cannot loot.");
+                         }
+                          uiManager.hideInteractionPrompt(); // Update prompt maybe
+                          currentInteractable = null; // Clear interaction target after looting
+                     }
+                     break;
+                  case 'water_source':
+                      const canteenSlot = inventoryManager.quickBar.find(slot => slot && slot.item === 'canteen') || inventoryManager.inventory.find(slot => slot && slot.item === 'canteen');
+                      if (canteenSlot) {
+                          // TODO: Add capacity to canteen and fill status
+                          if (inventoryManager.addItem('dirty_water', 1)) { // Add dirty water resource for now
+                               console.log("Collected dirty water.");
+                               // Maybe remove 1 'use' from canteen or track water level
+                          } else {
+                               console.log("Inventory full, cannot collect water.");
+                          }
+                      } else {
+                          console.log("Need a canteen to collect water.");
+                      }
+                      break;
+                  case 'campfire':
+                      console.warn("TODO: Implement Campfire UI and cooking logic.");
+                      // Open a cooking UI modal
+                      break;
+                 // Add cases for opening doors, using crafting stations etc.
+             }
+              // Re-check interaction prompt after action
+             checkInteraction();
+        }
+
+         // Triggered by Left Click
+        function performAction(target = null) {
+            if (uiManager.isInventoryOpen || uiManager.isBuildMenuOpen || playerIsPlacing) return;
+
+             const selectedItemData = inventoryManager.getSelectedItem();
+             const selectedItem = selectedItemData ? selectedItemData.item : null;
+
+             // Determine target: Use provided target (from E interact) or raycast
+             let actualTarget = target || currentInteractable; // Prioritize E-key target if provided
+
+             console.log(`Action performed. Selected item: ${selectedItem}. Target: ${actualTarget?.userData.type}`);
+
+            // Harvesting Logic
+             if (actualTarget && actualTarget.userData.harvestable) {
+                 let requiredTool = null;
+                 let damage = 10; // Base damage
+
+                 if (actualTarget.userData.type === 'tree') requiredTool = 'axe';
+                 if (actualTarget.userData.type === 'rock') requiredTool = 'pickaxe';
+
+                 if (selectedItem === requiredTool) {
+                     console.log(`Hitting ${actualTarget.userData.type} with ${requiredTool}`);
+                     actualTarget.userData.health -= damage; // Apply damage
+                      // Add visual feedback (shake, particle effect) - TODO
+
+                     if (actualTarget.userData.health <= 0) {
+                         console.log(`${actualTarget.userData.type} harvested!`);
+                         inventoryManager.addItem(actualTarget.userData.resource, actualTarget.userData.amount);
+                         world.removeObject(actualTarget); // Remove the object from the world
+                         currentInteractable = null; // Clear target
+                         uiManager.hideInteractionPrompt();
+                     } else {
+                          // Update interaction prompt with new health
+                          checkInteraction();
+                     }
+                 } else {
+                     console.log(`Need a ${requiredTool} to harvest ${actualTarget.userData.type}`);
+                 }
+             }
+             // Attacking Animals
+             else if (actualTarget && actualTarget.userData.type === 'animal') {
+                  let damage = 5; // Bare hands damage
+                  if (selectedItem === 'knife') damage = 15;
+                  if (selectedItem === 'axe') damage = 10;
+                  // Add other weapon damages
+
+                  console.log(`Attacking animal with ${selectedItem || 'hands'}. Damage: ${damage}`);
+                  actualTarget.userData.health -= damage;
+
+                  if (actualTarget.userData.health <= 0) {
+                       console.log("Animal killed!");
+                       // Drop loot
+                       for (const [resource, quantity] of Object.entries(actualTarget.userData.loot)) {
+                            inventoryManager.addItem(resource, quantity);
+                       }
+                       world.removeObject(actualTarget);
+                       currentInteractable = null;
+                       uiManager.hideInteractionPrompt();
+                  } else {
+                      // Optional: Make animal flee?
+                       checkInteraction(); // Update health display
+                  }
+             }
+             // Use other items (e.g., eating food - TODO)
+              else if (selectedItem === 'cooked_meat') {
+                 console.warn("TODO: Implement eating");
+                 // inventoryManager.removeItem('cooked_meat', 1);
+                 // player.increaseHunger(50);
+              }
+              // else if (selectedItem === 'sterilized_water') { ... }
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+             // Update systems that run even when paused or menus are open
+             world.updateAnimals(delta); // Animals keep moving
+
+             // Only update player movement and interactions if controls are locked
+            if (controls.isLocked) {
+                player.update(delta);
+                checkInteraction(); // Check what the player is looking at
+                 if (playerIsPlacing) {
+                     buildingManager.updatePlacement(); // Update ghost mesh position/color
+                 }
+            } else {
+                // If controls are not locked, ensure velocity stops (might be redundant depending on Player.update)
+                player.velocity.x = 0;
+                player.velocity.z = 0;
+            }
+
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Start ---
+        init();
+
+         // --- Export necessary functions/objects to global scope for button clicks ---
+         // This is generally avoided with better module patterns, but simplest for this example
+         window.uiManager = uiManager; // Make UI manager accessible for onclick events
+
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    background-color: #000;
+    color: white;
+}
+
+#game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+canvas {
+    display: block;
+}
+
+#blocker {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    display: flex; /* Use flexbox */
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+}
+
+#instructions {
+    width: 80%;
+    max-width: 500px;
+    padding: 20px;
+    background-color: rgba(50, 50, 50, 0.9);
+    border-radius: 10px;
+    text-align: center;
+    color: #fff;
+    cursor: default;
+}
+#settings label, #settings input, #settings select {
+    margin: 5px;
+    color: white;
+}
+#settings input, #settings select {
+     background-color: #444;
+     border: 1px solid #666;
+     padding: 3px;
+}
+#startButton {
+     margin-top: 15px;
+     padding: 10px 20px;
+     cursor: pointer;
+}
+
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 20px;
+    color: white;
+    pointer-events: none; /* Important so it doesn't interfere with clicks */
+}
+
+#quick-bar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px;
+    border-radius: 5px;
+}
+
+.quick-slot, .inventory-slot {
+    width: 50px;
+    height: 50px;
+    border: 1px solid #ccc;
+    margin: 2px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Center vertically */
+    align-items: center; /* Center horizontally */
+    font-size: 10px;
+    background-color: rgba(255, 255, 255, 0.2);
+    position: relative;
+    overflow: hidden; /* Hide overflowing text */
+    text-align: center;
+    cursor: pointer;
+}
+.quick-slot.selected {
+    border: 2px solid yellow;
+}
+.slot-item-name {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.slot-item-quantity {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 2px black;
+}
+
+
+#inventory {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 70%;
+    max-width: 800px;
+    height: 70%;
+    background-color: rgba(50, 50, 50, 0.9);
+    border: 2px solid #aaa;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex; /* Use flexbox for layout */
+    flex-direction: column; /* Stack elements vertically */
+    box-sizing: border-box; /* Include padding in width/height */
+}
+
+#inventory h2, #inventory h3 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 10px;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+#inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); /* Responsive grid */
+    gap: 5px;
+    overflow-y: auto; /* Allow scrolling if needed */
+    padding: 10px;
+    background-color: rgba(0,0,0,0.3);
+    border-radius: 5px;
+    flex-grow: 1; /* Allow grid to take available space */
+    margin-bottom: 10px; /* Space before crafting */
+}
+
+#crafting-menu {
+    flex-shrink: 0; /* Prevent shrinking */
+    max-height: 150px; /* Limit height */
+    overflow-y: auto; /* Scroll if needed */
+    background-color: rgba(0,0,0,0.2);
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px; /* Space before close button */
+}
+
+#crafting-recipes {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#crafting-recipes li {
+    padding: 5px;
+    cursor: pointer;
+    border-bottom: 1px solid #444;
+}
+#crafting-recipes li:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+#crafting-recipes li:last-child {
+    border-bottom: none;
+}
+.craftable {
+    color: lightgreen;
+}
+.not-craftable {
+    color: #aaa; /* Grey out if not enough resources */
+    font-style: italic;
+}
+
+
+#close-inventory {
+    padding: 10px 20px;
+    cursor: pointer;
+    align-self: center; /* Center the button */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+
+.hidden {
+    display: none !important; /* Use !important to override potential inline styles */
+}
+
+#message-log {
+    position: absolute;
+    bottom: 80px; /* Above quick bar */
+    left: 10px;
+    width: 300px;
+    height: 100px;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    font-size: 12px;
+    padding: 5px;
+    border-radius: 3px;
+    overflow-y: scroll;
+    pointer-events: none; /* Allow clicks through */
+}
+#message-log p {
+    margin: 0 0 3px 0;
+}
+
+/* Basic representation for items */
+.item-icon {
+    width: 30px;
+    height: 30px;
+    margin-bottom: 2px;
+}
+.item-wood { background-color: saddlebrown; }
+.item-stone { background-color: gray; }
+.item-rope { background-color: burlywood; }
+.item-scrap_metal { background-color: dimgray; }
+.item-nail { background-color: silver; }
+.item-meat_raw { background-color: palevioletred; }
+.item-meat_cooked { background-color: brown; }
+.item-leather { background-color: peru; }
+.item-fat { background-color: lightyellow; }
+.item-canteen { background-color: steelblue; }
+.item-water_dirty { background-color: darkcyan; }
+.item-water_clean { background-color: lightblue; }
+.item-axe { background-color: lightslategray; border: 1px dotted black;}
+.item-pickaxe { background-color: darkslategray; border: 1px dotted black;}
+.item-knife { background-color: silver; border: 1px dotted black;}
+.item-campfire { background-color: orangered; }
+.item-crafting_table { background-color: chocolate; }
+.item-forge { background-color: darkred; }

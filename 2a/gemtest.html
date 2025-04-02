@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Three.js Example (HTTP CDN - cdnjs)</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+    <!-- 
+      Attempting to load Three.js library from cdnjs using HTTP.
+      WARNING: This is likely to be blocked by modern browsers 
+      due to mixed content security policies.
+      Check the browser's developer console for errors.
+      Using version r128 as an example from cdnjs.
+    -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> 
+    
+    <!-- Your Three.js application code -->
+    <script>
+        // Check if THREE was loaded successfully (it likely wasn't if using HTTP)
+        if (typeof THREE === 'undefined') {
+            console.error("THREE.js library failed to load. Check the network tab and console for errors (likely Mixed Content).");
+            // Display a message to the user on the page itself
+            const errorDiv = document.createElement('div');
+            errorDiv.style.padding = '20px';
+            errorDiv.style.fontFamily = 'sans-serif';
+            errorDiv.style.color = 'red';
+            errorDiv.innerHTML = '<strong>Error:</strong> Could not load the THREE.js library. <br/>This is likely due to browser security blocking HTTP content (Mixed Content). <br/>Please check the Developer Console (F12) for details. <br/>Using HTTPS for the library is strongly recommended.';
+            document.body.appendChild(errorDiv);
+
+        } else {
+
+            // If THREE exists, proceed with setting up the scene
+            console.log("THREE.js loaded successfully."); // You'll only see this if it worked
+
+            // 1. Scene
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xeeeeee); 
+
+            // 2. Camera
+            const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+            camera.position.z = 5; 
+
+            // 3. Renderer
+            const renderer = new THREE.WebGLRenderer({ antialias: true }); 
+            renderer.setSize( window.innerWidth, window.innerHeight ); 
+            document.body.appendChild( renderer.domElement ); 
+
+            // 4. Geometry
+            const geometry = new THREE.BoxGeometry( 1, 1, 1 ); 
+
+            // 5. Material
+            const material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } ); 
+
+            // 6. Mesh
+            const cube = new THREE.Mesh( geometry, material );
+            scene.add( cube ); 
+
+            // 7. Animation Loop
+            function animate() {
+                requestAnimationFrame( animate ); 
+
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+
+                renderer.render( scene, camera );
+            }
+
+            // 8. Handle Window Resize
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix(); 
+                renderer.setSize( window.innerWidth, window.innerHeight );
+            }
+            window.addEventListener( 'resize', onWindowResize, false );
+
+            // Start the animation loop
+            animate();
+        }
+
+    </script>
+</body>
+</html>

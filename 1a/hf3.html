@@ -1,0 +1,3230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #loading-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #fff;
+            display: flex; /* Initially visible */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+        #error-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #700;
+            color: #fff;
+            display: none; /* Initially hidden */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            text-align: center;
+            padding: 20px;
+        }
+        #error-message {
+            margin-top: 15px;
+            font-size: 16px;
+            max-width: 80%;
+        }
+        #game-ui {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none; /* Initially hidden */
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            user-select: none;
+        }
+        #interaction-prompt {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        #health-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 200px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        #health-fill {
+            height: 100%;
+            width: 100%;
+            background-color: #f00;
+            transition: width 0.5s ease-in-out;
+        }
+        #hunger-bar {
+            position: absolute;
+            bottom: 50px;
+            left: 20px;
+            width: 200px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        #hunger-fill {
+            height: 100%;
+            width: 80%;
+            background-color: #eb8c34;
+            transition: width 0.5s ease-in-out;
+        }
+        #thirst-bar {
+            position: absolute;
+            bottom: 80px;
+            left: 20px;
+            width: 200px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        #thirst-fill {
+            height: 100%;
+            width: 60%;
+            background-color: #3498db;
+            transition: width 0.5s ease-in-out;
+        }
+        #quick-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+        }
+        .quick-slot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            border: 2px solid #555;
+            pointer-events: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 12px;
+            position: relative;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .quick-slot.selected {
+            border-color: white;
+        }
+        .quick-slot-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 14px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        #inventory {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 500px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border-radius: 10px;
+            display: none;
+            pointer-events: auto;
+            padding: 20px;
+            color: white;
+            z-index: 100;
+        }
+        #inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+            height: calc(100% - 100px); /* Adjust based on other elements */
+            overflow-y: auto;
+        }
+        .inventory-slot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            border: 2px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 12px;
+            position: relative;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .inventory-slot-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 14px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        #crafting-section {
+            margin-bottom: 10px;
+        }
+        #crafting-menu {
+            display: none;
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .crafting-recipe {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .crafting-recipe:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+        }
+        .recipe-ingredients {
+            display: flex;
+            gap: 10px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        .recipe-ingredient {
+            display: flex;
+            align-items: center;
+        }
+        #start-menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none; /* Initially hidden, shown after checks pass */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 900;
+        }
+        #start-menu h1 {
+            color: white;
+            font-size: 48px;
+            margin-bottom: 40px;
+        }
+        .menu-option {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 5px;
+            margin: 10px 0;
+            cursor: pointer;
+            width: 300px;
+            text-align: center;
+        }
+        .menu-option:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        #settings-menu {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 300px; /* Match button width */
+        }
+        .settings-group {
+            margin: 10px 0;
+            width: 100%;
+        }
+        .settings-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: white;
+        }
+        .settings-group input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .settings-value {
+            color: #aaa;
+            float: right;
+        }
+        #back-button {
+            margin-top: 20px;
+        }
+        .notification {
+             position: absolute;
+             top: 20%;
+             left: 50%;
+             transform: translateX(-50%);
+             background-color: rgba(0, 0, 0, 0.7);
+             color: white;
+             padding: 10px 20px;
+             border-radius: 5px;
+             z-index: 1100; /* Above inventory */
+             font-size: 16px;
+             text-align: center;
+             pointer-events: none;
+         }
+         #game-over-screen { /* Style for game over */
+             position: absolute;
+             top: 0;
+             left: 0;
+             width: 100%;
+             height: 100%;
+             background-color: rgba(100, 0, 0, 0.8);
+             color: white;
+             display: flex;
+             flex-direction: column;
+             justify-content: center;
+             align-items: center;
+             z-index: 1001;
+             font-size: 24px;
+             text-align: center;
+         }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <h1>Loading Game...</h1>
+        <p>Checking compatibility...</p>
+    </div>
+    <!-- Import Three.js from CDN -->
+    <!-- IMPORTANT: Place this script tag *before* the game logic script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <div id="error-screen">
+        <h1>Compatibility Issue</h1>
+        <p id="error-message">An error occurred.</p>
+        <p>Please try a different browser (like Chrome or Firefox) or ensure your browser and graphics drivers are up-to-date.</p>
+    </div>
+
+    <div id="start-menu">
+        <h1>Survival Game</h1>
+        <div id="main-menu">
+            <button class="menu-option" id="start-game-btn">Start Game</button>
+            <button class="menu-option" id="settings-btn">Settings</button>
+        </div>
+        <div id="settings-menu">
+            <h2>Settings</h2>
+            <div class="settings-group">
+                <label>Starting Resources <span id="resources-value" class="settings-value">50</span></label>
+                <input type="range" id="resources-slider" min="0" max="100" value="50">
+            </div>
+            <div class="settings-group">
+                <label>Player Speed <span id="speed-value" class="settings-value">5</span></label>
+                <input type="range" id="speed-slider" min="1" max="10" value="5">
+            </div>
+            <div class="settings-group">
+                <label>Player Height <span id="height-value" class="settings-value">1.8</span></label>
+                <input type="range" id="height-slider" min="1" max="3" step="0.1" value="1.8">
+            </div>
+            <button class="menu-option" id="back-button">Back</button>
+        </div>
+    </div>
+
+    <div id="game-ui">
+        <div id="crosshair">+</div>
+        <div id="interaction-prompt">Press E to interact</div>
+
+        <div id="health-bar"><div id="health-fill"></div></div>
+        <div id="hunger-bar"><div id="hunger-fill"></div></div>
+        <div id="thirst-bar"><div id="thirst-fill"></div></div>
+
+        <div id="quick-bar">
+            <div class="quick-slot selected" data-slot="0">Axe</div>
+            <div class="quick-slot" data-slot="1">Pick</div>
+            <div class="quick-slot" data-slot="2">Knife</div>
+            <div class="quick-slot" data-slot="3">Canteen</div>
+            <div class="quick-slot" data-slot="4"></div>
+            <div class="quick-slot" data-slot="5"></div>
+            <div class="quick-slot" data-slot="6"></div>
+            <div class="quick-slot" data-slot="7"></div>
+        </div>
+
+        <div id="inventory">
+            <h2>Inventory</h2>
+            <div id="crafting-section">
+                <button id="toggle-crafting" class="menu-option" style="width: auto; padding: 8px 15px; margin-bottom: 10px;">Show Crafting</button>
+                <div id="crafting-menu">
+                    <h3>Crafting</h3>
+                     <div class="crafting-recipe" data-recipe="axe">
+                        <div>Axe</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">2x Wood</div>
+                            <div class="recipe-ingredient">1x Stone</div>
+                        </div>
+                    </div>
+                    <div class="crafting-recipe" data-recipe="pickaxe">
+                        <div>Pick-axe</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">2x Wood</div>
+                            <div class="recipe-ingredient">3x Stone</div>
+                        </div>
+                    </div>
+                    <div class="crafting-recipe" data-recipe="campfire">
+                        <div>Campfire</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">5x Wood</div>
+                            <div class="recipe-ingredient">3x Stone</div>
+                        </div>
+                    </div>
+                    <div class="crafting-recipe" data-recipe="craftingtable">
+                        <div>Crafting Table</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">10x Wood</div>
+                            <div class="recipe-ingredient">4x Nails</div>
+                        </div>
+                    </div>
+                    <div class="crafting-recipe" data-recipe="forge">
+                        <div>Forge</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">15x Stone</div>
+                            <div class="recipe-ingredient">5x Metal</div>
+                        </div>
+                    </div>
+                    <div class="crafting-recipe" data-recipe="rope">
+                        <div>Rope</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">6x Grass</div>
+                        </div>
+                    </div>
+                     <div class="crafting-recipe" data-recipe="cookedMeat">
+                        <div>Cooked Meat</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">1x Meat</div>
+                            <div class="recipe-ingredient">(Requires Campfire)</div>
+                        </div>
+                    </div>
+                    <div class="crafting-recipe" data-recipe="purifiedWater">
+                        <div>Purified Water</div>
+                        <div class="recipe-ingredients">
+                            <div class="recipe-ingredient">1x Canteen</div>
+                            <div class="recipe-ingredient">(Requires Campfire)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="inventory-grid">
+                <!-- Inventory slots will be generated with JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Logic Script -->
+    <script>
+        // --- Compatibility Check and Initialization ---
+
+        const loadingScreen = document.getElementById('loading-screen');
+        const errorScreen = document.getElementById('error-screen');
+        const errorMessage = document.getElementById('error-message');
+        const startMenu = document.getElementById('start-menu');
+        const gameUI = document.getElementById('game-ui');
+
+        function showError(message) {
+            console.error("Compatibility Error:", message);
+            loadingScreen.style.display = 'none';
+            startMenu.style.display = 'none';
+            gameUI.style.display = 'none';
+            errorMessage.textContent = message;
+            errorScreen.style.display = 'flex';
+        }
+
+        function runCompatibilityChecks() {
+            // Check 1: Is Three.js loaded?
+            if (typeof THREE === 'undefined') {
+                showError('Failed to load the Three.js library. Please check your internet connection and refresh. If the problem persists, the CDN might be down.');
+                return false;
+            }
+            console.log("Check 1: Three.js loaded successfully.");
+
+            // Check 2: Does the browser support WebGL?
+            if (!window.WebGLRenderingContext) {
+                showError('Your browser does not support WebGL, which is required for this game.');
+                return false;
+            }
+            // More robust check using canvas
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) {
+                    showError('Could not initialize WebGL context. Your browser might support it, but it could be disabled or unavailable.');
+                    return false;
+                }
+            } catch (e) {
+                showError('An error occurred while checking for WebGL support.');
+                console.error("WebGL check error:", e);
+                return false;
+            }
+            console.log("Check 2: WebGL support detected.");
+
+            // Check 3: Can Three.js initialize a renderer?
+            let testRenderer;
+            try {
+                testRenderer = new THREE.WebGLRenderer();
+                if (!testRenderer.domElement) {
+                     throw new Error("Renderer domElement not created.");
+                }
+                console.log("Check 3: Three.js renderer initialized successfully.");
+            } catch (e) {
+                showError('Failed to initialize the Three.js WebGL renderer. This might be due to incompatible graphics hardware, outdated drivers, or browser settings (like disabled hardware acceleration).');
+                console.error("WebGL Renderer initialization error:", e);
+                return false;
+            } finally {
+                // Clean up the test renderer if it was created
+                if (testRenderer) {
+                    testRenderer.dispose();
+                    // Ensure the temporary canvas is removed if added to DOM (though not necessary here)
+                }
+            }
+
+            console.log("All compatibility checks passed.");
+            return true; // All checks passed
+        }
+
+        // --- Game Code ---
+        // Wrap entire game logic in a function to be called after checks
+        function initializeGame() {
+
+            // Game settings
+            let gameSettings = {
+                startingResources: 50,
+                playerSpeed: 5,
+                playerHeight: 1.8
+            };
+
+            // Game state
+            let gameState = {
+                health: 100,
+                hunger: 80,
+                thirst: 60,
+                inventory: {
+                    'wood': 0, 'stone': 0, 'grass': 0, 'metal': 0, 'nails': 0,
+                    'meat': 0, 'leather': 0, 'fat': 0, 'cookedMeat': 0,
+                    'axe': 0, 'pickaxe': 0, 'knife': 0, 'canteen': 0,
+                    'campfire': 0, 'rope': 0, 'craftingtable': 0, 'forge': 0,
+                },
+                quickBar: [
+                    { item: 'axe', count: 1 }, { item: 'pickaxe', count: 1 },
+                    { item: 'knife', count: 1 }, { item: 'canteen', count: 1 },
+                    null, null, null, null
+                ],
+                selectedSlot: 0,
+                lastGathered: 0,
+                showInventory: false,
+                showCrafting: false,
+                interactable: null,
+                waterPurified: false, // Simple flag for canteen status
+                eating: false, // Flag for eating action
+                placing: null, // Structure type being placed
+                placementPreview: null, // Mesh for placement preview
+                isGameOver: false,
+            };
+
+            // Three.js variables
+            let scene, camera, renderer, player, controls, clock;
+            let objects = []; // For collision detection
+            let animals = []; // For animal logic
+            let interactables = []; // For interactive objects
+            let placementClickListener = null; // Store the placement listener to remove it
+            let animationFrameId = null; // To store the requestAnimationFrame ID
+
+            function initUIAndSettings() {
+                 console.log("Initializing game settings and UI...");
+                // Set up event listeners for start menu
+                document.getElementById('start-game-btn').addEventListener('click', startGame);
+                document.getElementById('settings-btn').addEventListener('click', () => {
+                    document.getElementById('main-menu').style.display = 'none';
+                    document.getElementById('settings-menu').style.display = 'flex';
+                });
+
+                document.getElementById('back-button').addEventListener('click', () => {
+                    document.getElementById('settings-menu').style.display = 'none';
+                    document.getElementById('main-menu').style.display = 'block';
+                });
+
+                // Settings sliders
+                const resourcesSlider = document.getElementById('resources-slider');
+                const resourcesValue = document.getElementById('resources-value');
+                resourcesSlider.addEventListener('input', () => {
+                    gameSettings.startingResources = parseInt(resourcesSlider.value);
+                    resourcesValue.textContent = resourcesSlider.value;
+                });
+
+                const speedSlider = document.getElementById('speed-slider');
+                const speedValue = document.getElementById('speed-value');
+                speedSlider.addEventListener('input', () => {
+                    gameSettings.playerSpeed = parseInt(speedSlider.value);
+                    speedValue.textContent = speedSlider.value;
+                    if (player) player.speed = gameSettings.playerSpeed * 0.1; // Update player speed if game started
+                });
+
+                const heightSlider = document.getElementById('height-slider');
+                const heightValue = document.getElementById('height-value');
+                heightSlider.addEventListener('input', () => {
+                    gameSettings.playerHeight = parseFloat(heightSlider.value);
+                    heightValue.textContent = heightSlider.value;
+                     if (player) { // Update player height if game started
+                         player.height = gameSettings.playerHeight;
+                         // Adjust camera position instantly ONLY IF not currently looking up/down significantly
+                         // Or simply let the player object update handle it naturally
+                         // camera.position.y = player.position.y; // Might feel jerky
+                     }
+                });
+
+                // Generate inventory slots UI
+                const inventoryGrid = document.getElementById('inventory-grid');
+                inventoryGrid.innerHTML = ''; // Clear existing slots if any
+                for (let i = 0; i < 32; i++) { // Increased inventory size
+                    const slot = document.createElement('div');
+                    slot.className = 'inventory-slot';
+                    slot.dataset.slot = i;
+                    inventoryGrid.appendChild(slot);
+                }
+
+                // Button for toggling crafting menu
+                document.getElementById('toggle-crafting').addEventListener('click', () => {
+                    gameState.showCrafting = !gameState.showCrafting;
+                    document.getElementById('crafting-menu').style.display = gameState.showCrafting ? 'block' : 'none';
+                    document.getElementById('toggle-crafting').textContent = gameState.showCrafting ? 'Hide Crafting' : 'Show Crafting';
+                     if (gameState.showCrafting) {
+                         updateCraftingMenuAvailability(); // Update availability when menu shown
+                     }
+                });
+
+                // Add event listeners for crafting
+                document.querySelectorAll('.crafting-recipe').forEach(recipe => {
+                    recipe.addEventListener('click', () => {
+                        craftItem(recipe.dataset.recipe);
+                    });
+                });
+
+                 // Initialize UI elements based on default gameState
+                document.getElementById('health-fill').style.width = gameState.health + '%';
+                document.getElementById('hunger-fill').style.width = gameState.hunger + '%';
+                document.getElementById('thirst-fill').style.width = gameState.thirst + '%';
+                updateQuickBarUI(); // Initial quick bar display
+            }
+
+            function resetGameState() {
+                console.log("Resetting game state...");
+                gameState = {
+                    health: 100,
+                    hunger: 80,
+                    thirst: 60,
+                    inventory: {
+                        'wood': 0, 'stone': 0, 'grass': 0, 'metal': 0, 'nails': 0,
+                        'meat': 0, 'leather': 0, 'fat': 0, 'cookedMeat': 0,
+                        'axe': 0, 'pickaxe': 0, 'knife': 0, 'canteen': 0,
+                        'campfire': 0, 'rope': 0, 'craftingtable': 0, 'forge': 0,
+                    },
+                    quickBar: [
+                        { item: 'axe', count: 1 }, { item: 'pickaxe', count: 1 },
+                        { item: 'knife', count: 1 }, { item: 'canteen', count: 1 },
+                        null, null, null, null
+                    ],
+                    selectedSlot: 0,
+                    lastGathered: 0,
+                    showInventory: false,
+                    showCrafting: false,
+                    interactable: null,
+                    waterPurified: false,
+                    eating: false,
+                    placing: null,
+                    placementPreview: null,
+                    isGameOver: false,
+                };
+
+                 // Reset UI elements
+                document.getElementById('health-fill').style.width = '100%';
+                document.getElementById('hunger-fill').style.width = '80%';
+                document.getElementById('thirst-fill').style.width = '60%';
+                document.getElementById('inventory').style.display = 'none';
+                hideInteractionPrompt();
+                selectQuickSlot(0); // Select first slot by default
+                updateInventoryUI(); // Clear inventory UI
+                updateQuickBarUI();  // Reset quick bar UI
+            }
+
+            function cleanupThreeJS() {
+                console.log("Cleaning up Three.js scene...");
+                 if (animationFrameId) {
+                     cancelAnimationFrame(animationFrameId);
+                     animationFrameId = null;
+                     console.log("Cancelled animation frame.");
+                 }
+
+                if (scene) {
+                    // Dispose geometries, materials, textures
+                    scene.traverse(object => {
+                        if (object.geometry) {
+                            object.geometry.dispose();
+                            // console.log("Disposed geometry for:", object.name || object.type);
+                        }
+                        if (object.material) {
+                            if (Array.isArray(object.material)) {
+                                object.material.forEach(material => {
+                                    if (material.map) material.map.dispose();
+                                    material.dispose();
+                                });
+                            } else {
+                                if (object.material.map) object.material.map.dispose();
+                                object.material.dispose();
+                            }
+                            // console.log("Disposed material for:", object.name || object.type);
+                        }
+                    });
+                     while(scene.children.length > 0){
+                         scene.remove(scene.children[0]);
+                     }
+                     console.log("Removed all children from scene.");
+                }
+                 objects = [];
+                 animals = [];
+                 interactables = [];
+                 if (renderer) {
+                     if (renderer.domElement.parentNode) {
+                         renderer.domElement.parentNode.removeChild(renderer.domElement);
+                         console.log("Removed renderer DOM element.");
+                     }
+                     renderer.dispose();
+                     console.log("Disposed renderer.");
+                 }
+
+                 scene = null;
+                 camera = null;
+                 renderer = null;
+                 player = null;
+                 controls = null;
+                 clock = null; // Dispose clock too
+                 console.log("Three.js variables nulled.");
+            }
+
+             function cleanupGameListeners() {
+                  console.log("Removing game event listeners...");
+                  // Mouse movement for camera
+                  document.removeEventListener('mousemove', onMouseMove);
+
+                  // Lock pointer on click (specific element)
+                  // Check if renderer exists before trying to remove listener from its element
+                  if (renderer && renderer.domElement) {
+                      renderer.domElement.removeEventListener('click', lockPointer);
+                  }
+
+                  // Handle pointer lock changes
+                  document.removeEventListener('pointerlockchange', onPointerLockChange, false);
+                  document.removeEventListener('mozpointerlockchange', onPointerLockChange, false);
+                  document.removeEventListener('webkitpointerlockchange', onPointerLockChange, false);
+
+                  // Keyboard controls
+                  document.removeEventListener('keydown', onKeyDown);
+                  document.removeEventListener('keyup', onKeyUp);
+
+                  // Mouse click for interaction/gathering/placement
+                  document.removeEventListener('mousedown', onMouseDown);
+
+                  // Placement cancel listener (if active)
+                  if (placementClickListener) {
+                       document.removeEventListener('mousedown', placementClickListener);
+                       placementClickListener = null;
+                  }
+                  document.removeEventListener('contextmenu', preventContextMenu);
+
+                  // Quick bar slot selection (delegated to parent)
+                  // Keep this if #quick-bar remains, or remove if UI is fully rebuilt
+                  // document.getElementById('quick-bar').removeEventListener('click', handleQuickBarClick);
+
+                  // Window resize
+                  window.removeEventListener('resize', onWindowResize, false);
+                  console.log("Game listeners removed.");
+             }
+
+
+            function startGame() {
+                console.log("Starting game...");
+                if (renderer) { // If game is already running, clean up first
+                    console.log("Cleaning up previous game instance...");
+                    cleanupGameListeners(); // Remove old listeners first
+                    cleanupThreeJS(); // Then cleanup the scene/renderer
+                }
+                resetGameState(); // Reset game state variables and UI
+
+                document.getElementById('start-menu').style.display = 'none';
+                loadingScreen.style.display = 'flex'; // Show loading
+                loadingScreen.querySelector('p').textContent = 'Building world...'; // Update loading text
+
+                // Initialize resources based on settings
+                const startAmount = gameSettings.startingResources;
+                gameState.inventory['wood'] = startAmount;
+                gameState.inventory['stone'] = startAmount;
+                gameState.inventory['grass'] = startAmount;
+                // Also give starting tools counts in inventory to match quickbar
+                gameState.inventory['axe'] = 1;
+                gameState.inventory['pickaxe'] = 1;
+                gameState.inventory['knife'] = 1;
+                gameState.inventory['canteen'] = 1;
+
+                // Delay setup to allow loading screen to show
+                setTimeout(() => {
+                    try {
+                        setupThreeJS(); // Setup scene, renderer, camera, player base
+                        setupGameEventListeners(); // Setup core listeners for this game instance
+                        createWorld(); // Populate the scene
+                        updateInventoryUI(); // Update UI with starting items
+                        updateQuickBarUI();
+
+                        // Hide loading screen when everything is ready
+                        loadingScreen.style.display = 'none';
+                        gameUI.style.display = 'block'; // Show game UI
+
+                        animate(); // Start the animation loop
+                        console.log("Game started successfully.");
+
+                        // Request pointer lock immediately after starting
+                        // Use a short delay to ensure the UI is rendered and ready
+                        setTimeout(() => {
+                             lockPointer();
+                        }, 100);
+
+                    } catch (error) {
+                        console.error("Error during game initialization:", error);
+                        loadingScreen.style.display = 'none';
+                        gameUI.style.display = 'none'; // Hide game UI if start failed
+                        cleanupThreeJS(); // Attempt cleanup on error
+                        showError(`A critical error occurred during game startup: ${error.message}`);
+                    }
+                }, 100); // Small delay for loading screen visibility
+            }
+
+             // Helper function for pointer lock request
+             function lockPointer() {
+                 if (document.pointerLockElement !== document.body) {
+                     document.body.requestPointerLock = document.body.requestPointerLock ||
+                                                       document.body.mozRequestPointerLock ||
+                                                       document.body.webkitRequestPointerLock;
+                      if (document.body.requestPointerLock) {
+                         document.body.requestPointerLock();
+                      } else {
+                         console.warn("Pointer Lock API not fully supported by this browser.");
+                      }
+                 }
+             }
+
+             // Helper function for releasing pointer lock
+             function unlockPointer() {
+                 document.exitPointerLock = document.exitPointerLock ||
+                                            document.mozExitPointerLock ||
+                                            document.webkitExitPointerLock;
+                 if (document.exitPointerLock) {
+                    document.exitPointerLock();
+                 }
+             }
+
+            function setupThreeJS() {
+                console.log("Setting up Three.js...");
+                // Create scene
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x87CEEB); // Sky blue
+
+                // Fog for limited visibility
+                scene.fog = new THREE.FogExp2(0x87CEEB, 0.01);
+
+                // Create camera
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                // Initial position set by player object later
+
+                // Create renderer
+                // Check added here as a safeguard, though already done in compatibility checks
+                try {
+                    renderer = new THREE.WebGLRenderer({ antialias: true });
+                } catch (e) {
+                    console.error("Failed to create WebGLRenderer inside setupThreeJS:", e);
+                    // Throw the error to be caught by startGame's try-catch
+                    throw new Error(`Renderer creation failed: ${e.message}`);
+                }
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true;
+                 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+                document.body.appendChild(renderer.domElement);
+
+
+                // Set up lighting
+                const ambientLight = new THREE.AmbientLight(0x606060); // Slightly brighter ambient
+                scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Slightly less intense sun
+                directionalLight.position.set(50, 100, 25); // Higher angle
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                 directionalLight.shadow.camera.near = 0.5;
+                 directionalLight.shadow.camera.far = 500;
+                 directionalLight.shadow.camera.left = -100;
+                 directionalLight.shadow.camera.right = 100;
+                 directionalLight.shadow.camera.top = 100;
+                 directionalLight.shadow.camera.bottom = -100;
+                scene.add(directionalLight);
+                // const shadowHelper = new THREE.CameraHelper( directionalLight.shadow.camera );
+                // scene.add( shadowHelper ); // Optional: visualize shadow frustum
+
+                // Player controller object
+                player = {
+                    position: new THREE.Vector3(0, gameSettings.playerHeight, 0), // Start slightly forward
+                    velocity: new THREE.Vector3(),
+                    onGround: false, // Start slightly above ground to fall initially
+                    canJump: true,
+                    speed: gameSettings.playerSpeed * 0.1, // Base speed factor
+                    jumpStrength: 8, // Adjusted jump strength
+                    gravity: 25, // Gravity value
+                    height: gameSettings.playerHeight,
+                    radius: 0.5, // Player collision radius
+                    update: function(delta) { // Pass delta time
+                        if (delta <= 0) return; // Avoid division by zero or weirdness if delta is zero/negative
+
+                        // Apply gravity
+                        if (!this.onGround) {
+                            this.velocity.y -= this.gravity * delta;
+                        }
+
+                         // --- Movement based on controls ---
+                         const moveSpeed = this.speed * (controls.run ? 1.5 : 1.0); // Apply run multiplier
+                         const moveDirection = new THREE.Vector3();
+                         // Get forward and right vectors based on camera's current rotation
+                         const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                         const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+
+                         if (controls.moveForward) moveDirection.add(forward);
+                         if (controls.moveBackward) moveDirection.sub(forward);
+                         if (controls.moveLeft) moveDirection.sub(right);
+                         if (controls.moveRight) moveDirection.add(right);
+
+                         moveDirection.y = 0; // Keep movement horizontal
+                         moveDirection.normalize(); // Ensure consistent speed regardless of direction combination
+
+                         // Apply movement impulse to velocity (more physics-like, but simpler direct add works too)
+                         // We'll directly modify position for simplicity here, scaled by delta
+                         const horizontalMove = moveDirection.multiplyScalar(moveSpeed * delta * 60); // Scale to feel consistent across frame rates
+
+                         // Update intended position based on input + velocity
+                         this.position.add(horizontalMove);
+                         this.position.addScaledVector(this.velocity, delta);
+
+
+                        // --- Collision Detection and Response ---
+                        this.checkCollisions(horizontalMove); // Pass the intended horizontal movement
+
+
+                        // --- Ground Check ---
+                        // Perform ground check *after* potential vertical collision push-up
+                        const groundRay = new THREE.Raycaster(this.position, new THREE.Vector3(0, -1, 0), 0, this.height + 0.1);
+                         const groundIntersects = groundRay.intersectObjects(objects, true); // Check against all collidables
+
+                         let foundGround = false;
+                         for (const intersect of groundIntersects) {
+                             if (intersect.distance <= this.height + 0.05) { // Allow tiny buffer
+                                 this.position.y = intersect.point.y + this.height;
+                                 this.velocity.y = 0;
+                                 this.onGround = true;
+                                 this.canJump = true;
+                                 foundGround = true;
+                                 break;
+                             }
+                         }
+
+                         if (!foundGround) {
+                             // More robust check if simple ground ray fails (e.g., on edge)
+                             // Simple fallback: if below height, snap up (can cause issues on slopes)
+                            if (this.position.y <= this.height + 0.01) { 
+                                 this.position.y = this.height;
+                                 this.velocity.y = 0;
+                                 this.onGround = true;
+                                 this.canJump = true;
+                             } else {
+                                 this.onGround = false;
+                             }
+                         }
+
+
+                        // --- Final Camera Update ---
+                        // First-person camera follows player position
+                        camera.position.copy(this.position);
+
+                    },
+                     checkCollisions: function(intendedMove) {
+                         const playerWorldPos = this.position.clone(); // Current actual position
+                         const playerBox = new THREE.Box3(
+                              new THREE.Vector3(playerWorldPos.x - this.radius, playerWorldPos.y - this.height, playerWorldPos.z - this.radius),
+                              new THREE.Vector3(playerWorldPos.x + this.radius, playerWorldPos.y, playerWorldPos.z + this.radius)
+                          );
+
+                         for (const object of objects) {
+                             if (object.isCollidable && object !== player && object.geometry) { // Ensure it's collidable, not the player itself, and has geometry
+                                 // Ensure object's matrix is up to date
+                                 object.updateMatrixWorld();
+                                 const objectBounds = new THREE.Box3().setFromObject(object, true); // Use precise bounds
+
+                                 if (playerBox.intersectsBox(objectBounds)) {
+                                      // Collision occurred - Resolve it
+                                      const penetration = new THREE.Vector3();
+                                      const centerP = new THREE.Vector3(); playerBox.getCenter(centerP);
+                                      const centerO = new THREE.Vector3(); objectBounds.getCenter(centerO);
+                                      const sizeP = new THREE.Vector3(); playerBox.getSize(sizeP);
+                                      const sizeO = new THREE.Vector3(); objectBounds.getSize(sizeO);
+
+                                      // Calculate minimum separation vector (push direction)
+                                      const deltaX = centerP.x - centerO.x;
+                                      const penX = (sizeP.x + sizeO.x) / 2 - Math.abs(deltaX);
+                                      const deltaZ = centerP.z - centerO.z;
+                                      const penZ = (sizeP.z + sizeO.z) / 2 - Math.abs(deltaZ);
+                                      const deltaY = centerP.y - centerO.y; // Player box bottom is at player height below position
+                                      const penY = (sizeP.y + sizeO.y) / 2 - Math.abs(deltaY);
+
+
+                                      // --- Resolve Horizontal Collision ---
+                                      // Push out on the axis of least penetration for horizontal movement
+                                      if (penX < penZ && penX > 0) {
+                                          const sign = Math.sign(deltaX);
+                                          this.position.x += sign * penX * 1.01; // Push slightly more
+                                          // Optionally zero out velocity component in this direction
+                                          // this.velocity.x = 0;
+                                      } else if (penZ > 0) {
+                                          const sign = Math.sign(deltaZ);
+                                          this.position.z += sign * penZ * 1.01;
+                                          // this.velocity.z = 0;
+                                      }
+
+                                       // --- Resolve Vertical Collision (Head Bumping / Landing on top) ---
+                                       if (penY > 0) {
+                                            // Check if player was moving downwards (landing)
+                                            if (this.velocity.y <= 0 && deltaY > 0) { // Player center above object center
+                                                 this.position.y += penY * 1.01; // Push up
+                                                 this.velocity.y = 0;
+                                                 this.onGround = true; // Collided below, so now on ground
+                                                 this.canJump = true;
+                                            }
+                                            // Check if player was moving upwards (hitting head)
+                                            else if (this.velocity.y > 0 && deltaY < 0) { // Player center below object center
+                                                 this.position.y -= penY * 1.01; // Push down
+                                                 this.velocity.y = 0; // Stop upward movement
+                                            }
+                                       }
+                                 }
+                             }
+                         }
+                     }
+                };
+
+                camera.position.copy(player.position); // Set initial camera position
+
+                // First-person controls object
+                controls = {
+                    moveForward: false,
+                    moveBackward: false,
+                    moveLeft: false,
+                    moveRight: false,
+                    jump: false,
+                    run: false,
+                    yawAngle: 0,
+                    pitchAngle: 0,
+                    mouseSensitivity: 0.002,
+                    update: function() { // Only handles camera rotation and jump initiation
+                        // Update camera rotation
+                        camera.rotation.y = this.yawAngle;
+                        camera.rotation.x = this.pitchAngle;
+                        camera.rotation.order = 'YXZ'; // Ensure correct rotation order
+
+                        // Jump logic - initiates jump if conditions met
+                        if (this.jump && player.canJump && player.onGround) {
+                            player.velocity.y = player.jumpStrength;
+                            player.onGround = false; // No longer on ground
+                            player.canJump = false; // Prevent holding jump for continuous boost
+                            this.jump = false; // Consume the jump input immediately
+                        }
+                    }
+                };
+
+                 clock = new THREE.Clock(); // Initialize clock for delta time
+                 console.log("Three.js setup complete.");
+            }
+
+             function onWindowResize() {
+                 if (!camera || !renderer) return;
+                 camera.aspect = window.innerWidth / window.innerHeight;
+                 camera.updateProjectionMatrix();
+                 renderer.setSize(window.innerWidth, window.innerHeight);
+             }
+
+            function setupGameEventListeners() {
+                 console.log("Setting up game event listeners...");
+                // Mouse movement for camera
+                document.addEventListener('mousemove', onMouseMove);
+
+                // Lock pointer on click of the renderer canvas
+                renderer.domElement.addEventListener('click', lockPointer);
+
+                // Handle pointer lock changes
+                document.addEventListener('pointerlockchange', onPointerLockChange, false);
+                document.addEventListener('mozpointerlockchange', onPointerLockChange, false); // Firefox
+                document.addEventListener('webkitpointerlockchange', onPointerLockChange, false); // Chrome/Safari/Opera
+
+                // Keyboard controls
+                document.addEventListener('keydown', onKeyDown);
+                document.addEventListener('keyup', onKeyUp);
+
+                // Mouse click for interaction/gathering/placement
+                document.addEventListener('mousedown', onMouseDown);
+
+                // Quick bar slot selection (delegated to parent)
+                document.getElementById('quick-bar').addEventListener('click', handleQuickBarClick);
+
+                 // Handle window resize
+                 window.addEventListener('resize', onWindowResize, false);
+            }
+
+             function handleQuickBarClick(event) {
+                 const slot = event.target.closest('.quick-slot');
+                 if (slot && slot.dataset.slot) {
+                     selectQuickSlot(parseInt(slot.dataset.slot));
+                 }
+             }
+
+
+             function onPointerLockChange() {
+                  // If pointer lock is lost AND the inventory is not open AND game isn't over, it was likely an external event (Esc, Alt+Tab)
+                 if (document.pointerLockElement !== document.body && !gameState.showInventory && !gameState.isGameOver && !gameState.placing) {
+                     console.log("Pointer lock lost unexpectedly.");
+                     // Optionally pause the game or show a pause menu here
+                     // For simplicity, we just log it. The player won't be able to look around.
+                 } else if (document.pointerLockElement === document.body) {
+                      console.log("Pointer lock acquired.");
+                      // Hide cursor or perform other actions when locked
+                 } else {
+                      console.log("Pointer lock released (expected, e.g., inventory open).");
+                 }
+             }
+
+            function onMouseMove(event) {
+                 if (document.pointerLockElement === document.body && !gameState.showInventory && !gameState.isGameOver && !gameState.placing) {
+                     controls.yawAngle -= event.movementX * controls.mouseSensitivity;
+                     controls.pitchAngle -= event.movementY * controls.mouseSensitivity;
+
+                     // Limit looking up and down (prevents camera flipping)
+                     const maxPitch = Math.PI / 2 - 0.01; // Slightly less than 90 degrees
+                     controls.pitchAngle = Math.max(-maxPitch, Math.min(maxPitch, controls.pitchAngle));
+                 }
+             }
+
+             function onKeyDown(event) {
+                  // Ignore input if game is over, except potentially for menu interaction in game over screen
+                 if (gameState.isGameOver) return;
+
+                 // Handle Tab separately to toggle inventory regardless of pointer lock
+                 if (event.code === 'Tab') {
+                     event.preventDefault(); // Prevent tabbing out of the game window
+                     toggleInventory();
+                     return; // Don't process other keys if toggling inventory
+                 }
+
+                  // Only process movement/action keys if pointer is locked OR if placing (allow cancel)
+                  // Allow actions E, F, G, C, P etc only when locked and not in inventory
+                  const canInteract = document.pointerLockElement === document.body && !gameState.showInventory && !gameState.placing;
+                  const canMove = document.pointerLockElement === document.body && !gameState.showInventory && !gameState.placing; // Currently disallowing move while placing
+
+                  if (canMove) {
+                      switch (event.code) {
+                          case 'KeyW': case 'ArrowUp': controls.moveForward = true; break;
+                          case 'KeyS': case 'ArrowDown': controls.moveBackward = true; break;
+                          case 'KeyA': case 'ArrowLeft': controls.moveLeft = true; break;
+                          case 'KeyD': case 'ArrowRight': controls.moveRight = true; break;
+                          case 'Space': if (!controls.jump) controls.jump = true; break; // Set jump flag
+                          case 'ShiftLeft': case 'ShiftRight': controls.run = true; break;
+                      }
+                  }
+
+                  if (canInteract) {
+                      switch (event.code) {
+                          case 'KeyE':
+                              if (gameState.interactable) interact();
+                              break;
+                          case 'KeyF': // Eat
+                              eatFood();
+                              break;
+                          case 'KeyG': // Drink
+                              drinkWater();
+                              break;
+                          case 'KeyP': // Place (example: Campfire) - Refined to use selected placeable item
+                               const selectedQuickItem = gameState.quickBar[gameState.selectedSlot]?.item;
+                               // Check if the selected item is a known placeable structure
+                               if (['campfire', 'craftingtable', 'forge'].includes(selectedQuickItem)) {
+                                   placeStructure(selectedQuickItem);
+                               } else {
+                                   showNotification("Select a placeable item (e.g., Campfire) in your quick bar first.", 2000);
+                               }
+                               break;
+                          case 'KeyC': // Use Campfire (or other structure?)
+                              if(gameState.interactable && gameState.interactable.structureType === 'campfire') {
+                                  useCampfire(); // Example specific use
+                              } else {
+                                  // Could generalize: if looking at interactable with 'use' type
+                                  // interact(); // Let the general interact handle it? Needs refinement.
+                                  showNotification("Not looking at a usable campfire.", 1500);
+                              }
+                              break;
+                          // Quick slot selection
+                          case 'Digit1': selectQuickSlot(0); break;
+                          case 'Digit2': selectQuickSlot(1); break;
+                          case 'Digit3': selectQuickSlot(2); break;
+                          case 'Digit4': selectQuickSlot(3); break;
+                          case 'Digit5': selectQuickSlot(4); break;
+                          case 'Digit6': selectQuickSlot(5); break;
+                          case 'Digit7': selectQuickSlot(6); break;
+                          case 'Digit8': selectQuickSlot(7); break;
+                          // Add more keys if needed
+                      }
+                  }
+             }
+
+             function onKeyUp(event) {
+                 if (gameState.isGameOver) return;
+                 // No need to check pointer lock for key *up* events related to movement control flags
+                 switch (event.code) {
+                     case 'KeyW': case 'ArrowUp': controls.moveForward = false; break;
+                     case 'KeyS': case 'ArrowDown': controls.moveBackward = false; break;
+                     case 'KeyA': case 'ArrowLeft': controls.moveLeft = false; break;
+                     case 'KeyD': case 'ArrowRight': controls.moveRight = false; break;
+                     case 'Space': controls.jump = false; player.canJump = true; break; // Reset jump flag and allow jumping again
+                     case 'ShiftLeft': case 'ShiftRight': controls.run = false; break;
+                 }
+             }
+
+              function onMouseDown(event) {
+                  if (gameState.isGameOver) return;
+
+                 // Handle placement confirmation/cancel first
+                 if (gameState.placing) {
+                    if (event.button === 0 && gameState.placementPreview) { // Left click to confirm
+                        handlePlacementConfirm();
+                    } else if (event.button === 2) { // Right click to cancel
+                         cancelPlacement();
+                         event.preventDefault(); // Prevent context menu only when cancelling placement
+                    }
+                    return; // Don't process gathering if placing/cancelling
+                 }
+
+                 // Only gather if pointer is locked and inventory is closed
+                 if (document.pointerLockElement === document.body && !gameState.showInventory) {
+                     if (event.button === 0) { // Left click
+                         gatherResource();
+                     }
+                     // Potentially add right-click action later (e.g., block?)
+                 }
+              }
+
+            // --- World Creation Functions ---
+
+            function createWorld() {
+                 console.log("Creating world...");
+                // Create ground
+                const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+                const groundMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x556B2F,  // Dark olive green
+                    roughness: 0.9, // More rough
+                    metalness: 0.1 // Less metallic
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.y = 0;
+                ground.receiveShadow = true;
+                ground.name = 'ground'; // Name the ground for raycasting and collision checks
+                ground.isCollidable = true; // Make ground collidable
+                scene.add(ground);
+                objects.push(ground); // Add ground itself for raycasting placement and collision
+
+                // Generate trees
+                for (let i = 0; i < 100; i++) {
+                    createTree(
+                        Math.random() * 900 - 450,
+                        0,
+                        Math.random() * 900 - 450
+                    );
+                }
+
+                // Generate rocks
+                for (let i = 0; i < 50; i++) {
+                    createRock(
+                        Math.random() * 900 - 450,
+                        0,
+                        Math.random() * 900 - 450
+                    );
+                }
+
+                // Generate water
+                createWater(0, 0.05, -200, 150, 100); // Adjusted position and size
+
+                // Generate tall grass
+                for (let i = 0; i < 500; i++) {
+                    createGrass(
+                        Math.random() * 900 - 450,
+                        0,
+                        Math.random() * 900 - 450
+                    );
+                }
+
+                // Generate scrap metal
+                for (let i = 0; i < 30; i++) {
+                    createScrapMetal(
+                        Math.random() * 900 - 450,
+                        0.1, // Slightly above ground
+                        Math.random() * 900 - 450
+                    );
+                }
+
+                // Generate nails
+                for (let i = 0; i < 20; i++) {
+                    createNails(
+                        Math.random() * 900 - 450,
+                        0.1, // Slightly above ground
+                        Math.random() * 900 - 450
+                    );
+                }
+
+                // Generate barrels
+                for (let i = 0; i < 15; i++) {
+                    createBarrel(
+                        Math.random() * 900 - 450,
+                        0,
+                        Math.random() * 900 - 450
+                    );
+                }
+
+                // Generate buildings
+                for (let i = 0; i < 5; i++) {
+                    // Use the improved createBuilding function
+                    createBuilding(
+                        Math.random() * 600 - 300,
+                        0,
+                        Math.random() * 600 - 300
+                    );
+                }
+
+                // Generate animals
+                for (let i = 0; i < 10; i++) { // Fewer animals initially
+                    createAnimal(
+                        Math.random() * 800 - 400, // Spread them out
+                        0,
+                        Math.random() * 800 - 400
+                    );
+                }
+                 console.log("World creation complete.");
+            }
+
+            function createTree(x, y, z) {
+                 const treeGroup = new THREE.Group();
+                 treeGroup.position.set(x, y, z);
+                 treeGroup.name = "Tree";
+
+                 // Tree trunk
+                 const trunkHeight = 5 + Math.random() * 2;
+                 const trunkRadius = 0.5 + Math.random() * 0.3;
+                 const trunkGeometry = new THREE.CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight, 8);
+                 const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9, metalness: 0.1 });
+                 const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                 trunk.position.y = trunkHeight / 2; // Position relative to group
+                 trunk.castShadow = true;
+                 trunk.receiveShadow = true;
+                 trunk.isCollidable = true; // Trunk part is collidable
+                 treeGroup.add(trunk);
+                 objects.push(trunk); // Add trunk specifically to collidables
+
+                 // Tree foliage (less dense geometry, maybe non-collidable?)
+                 const foliageHeight = 4 + Math.random() * 4;
+                 const foliageRadius = trunkRadius * 3 + Math.random();
+                 // Use less detailed geometry for foliage if performance is concern
+                 const foliageGeometry = new THREE.ConeGeometry(foliageRadius, foliageHeight, 6); // Fewer segments
+                 const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8, metalness: 0.1 });
+                 const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+                 foliage.position.y = trunkHeight + foliageHeight / 2 - 1; // Position relative to group, slightly overlap
+                 foliage.castShadow = true;
+                 foliage.receiveShadow = true;
+                 // Foliage usually isn't collidable in simple games
+                 // foliage.isCollidable = false;
+                 treeGroup.add(foliage);
+
+                 scene.add(treeGroup);
+
+                 // Interaction properties on the group
+                 treeGroup.isInteractable = true;
+                 treeGroup.resourceType = 'wood';
+                 treeGroup.interactionType = 'chop';
+                 treeGroup.requiredTool = 'axe';
+                 interactables.push(treeGroup); // Add group to interactables
+            }
+
+            function createRock(x, y, z) {
+                const scale = Math.random() * 0.8 + 0.8; // Random size
+                // Use Icosahedron or Dodecahedron for more rock-like shapes
+                const rockGeometry = new THREE.IcosahedronGeometry(scale, 0); // Level 0 detail is very low poly
+                const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.9, metalness: 0.2, flatShading: true }); // Flat shading looks more rocky
+                const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+                rock.position.set(x, y + scale / 2, z); // Position based on scale, ensure bottom rests near y=0
+                rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+                rock.name = "Rock";
+                scene.add(rock);
+
+                rock.isCollidable = true;
+                rock.isInteractable = true;
+                rock.resourceType = 'stone';
+                rock.interactionType = 'mine';
+                rock.requiredTool = 'pickaxe';
+                objects.push(rock);
+                interactables.push(rock);
+            }
+
+            function createWater(x, y, z, width, depth) {
+                const waterGeometry = new THREE.PlaneGeometry(width, depth);
+                // Simple water material
+                const waterMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x3498db, // Brighter blue
+                    roughness: 0.2,
+                    metalness: 0.1,
+                    transparent: true,
+                    opacity: 0.75
+                });
+                const water = new THREE.Mesh(waterGeometry, waterMaterial);
+                water.rotation.x = -Math.PI / 2;
+                water.position.set(x, y, z); // Y should be slightly above ground (0.05)
+                water.receiveShadow = false; // Water doesn't cast shadows, but can receive them subtly
+                water.name = "Water";
+                scene.add(water);
+
+                // Make the water plane interactable for filling canteen
+                water.isInteractable = true;
+                water.resourceType = 'water'; // Not really a resource, but indicates type
+                water.interactionType = 'fill';
+                water.requiredTool = 'canteen';
+                interactables.push(water);
+                // Water is not collidable by default in this simple setup
+                // water.isCollidable = false;
+            }
+
+            function createGrass(x, y, z) {
+                const grassHeight = 0.8 + Math.random() * 0.4;
+                const grassGeometry = new THREE.PlaneGeometry(0.5, grassHeight);
+                 // Simple green material, DoubleSide allows seeing it from both sides
+                 const grassMaterial = new THREE.MeshStandardMaterial({
+                     color: 0x559055, // Greener grass
+                     side: THREE.DoubleSide,
+                     alphaTest: 0.1 // Use alphaTest if you add transparency/texture later
+                 });
+                const grass = new THREE.Mesh(grassGeometry, grassMaterial);
+                grass.position.set(x, y + grassHeight / 2, z);
+                grass.rotation.y = Math.random() * Math.PI;
+                // Grass typically doesn't cast significant shadows and isn't collidable
+                grass.castShadow = false;
+                grass.receiveShadow = true; // Can receive shadows from trees etc.
+                grass.name = "Grass";
+                scene.add(grass);
+
+                grass.isInteractable = true;
+                grass.resourceType = 'grass';
+                grass.interactionType = 'harvest';
+                grass.requiredTool = 'knife';
+                interactables.push(grass);
+                // grass.isCollidable = false;
+            }
+
+            function createScrapMetal(x, y, z) {
+                 // More varied shapes for scrap
+                 let metalGeometry;
+                 const type = Math.random();
+                 if (type < 0.5) {
+                      metalGeometry = new THREE.BoxGeometry(0.8 + Math.random() * 0.4, 0.1 + Math.random() * 0.1, 0.6 + Math.random() * 0.4);
+                 } else {
+                      metalGeometry = new THREE.CylinderGeometry(0.3 + Math.random() * 0.2, 0.3 + Math.random() * 0.2, 0.2 + Math.random() * 0.1, 8); // Fewer segments
+                 }
+
+                 const metalMaterial = new THREE.MeshStandardMaterial({
+                     color: 0x708090, // Slate gray
+                     roughness: 0.6,
+                     metalness: 0.8
+                 });
+                 const metal = new THREE.Mesh(metalGeometry, metalMaterial);
+                 metal.position.set(x, y + metalGeometry.parameters.height / 2, z); // Position based on geometry height
+                 metal.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
+                 metal.castShadow = true;
+                 metal.receiveShadow = true;
+                 metal.name = "Scrap Metal";
+                 scene.add(metal);
+
+                 metal.isInteractable = true;
+                 metal.resourceType = 'metal';
+                 metal.interactionType = 'collect';
+                 metal.requiredTool = null; // No tool needed
+                 interactables.push(metal);
+                 // Small scrap usually isn't collidable
+                 // metal.isCollidable = false;
+            }
+
+            function createNails(x, y, z) {
+                 const nailGroup = new THREE.Group(); // Group multiple nails
+                 const numNails = Math.floor(Math.random() * 5) + 3;
+
+                 const nailGeometry = new THREE.CylinderGeometry(0.02, 0.01, 0.15, 6); // Smaller nails
+                 const nailMaterial = new THREE.MeshStandardMaterial({
+                     color: 0x606060, // Darker grey
+                     roughness: 0.4,
+                     metalness: 0.9
+                 });
+
+                 for (let i = 0; i < numNails; i++) {
+                     const nail = new THREE.Mesh(nailGeometry, nailMaterial);
+                     nail.position.set(
+                         (Math.random() - 0.5) * 0.2,
+                         0.075, // Half height
+                         (Math.random() - 0.5) * 0.2
+                     );
+                     nail.rotation.set(
+                         Math.PI / 2 + (Math.random() - 0.5) * 0.5, // Random tilt
+                         Math.random() * Math.PI,
+                         Math.random() * Math.PI
+                     );
+                     nail.castShadow = true;
+                     nailGroup.add(nail);
+                 }
+
+                 nailGroup.position.set(x, y, z); // Position the group
+                 nailGroup.name = "Nails Pile";
+                 scene.add(nailGroup);
+
+                 nailGroup.isInteractable = true;
+                 nailGroup.resourceType = 'nails';
+                 nailGroup.interactionType = 'collect';
+                 nailGroup.requiredTool = null; // No tool needed
+                 nailGroup.amount = numNails; // Store how many nails are here
+                 interactables.push(nailGroup);
+                 // Not collidable
+            }
+
+            function createBarrel(x, y, z) {
+                const barrelRadius = 0.6;
+                const barrelHeight = 1.2;
+                const barrelGeometry = new THREE.CylinderGeometry(barrelRadius, barrelRadius, barrelHeight, 16);
+                const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0xA0522D, roughness: 0.8, metalness: 0.2 }); // Sienna color
+                const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+                barrel.position.set(x, y + barrelHeight / 2, z); // Center based on height
+                barrel.castShadow = true;
+                barrel.receiveShadow = true;
+                barrel.name = "Barrel";
+                scene.add(barrel);
+
+                barrel.isCollidable = true;
+                barrel.isInteractable = true;
+                barrel.interactionType = 'search';
+                barrel.loot = { // More varied loot
+                    'wood': Math.random() < 0.3 ? Math.floor(Math.random() * 5) + 1 : 0,
+                    'metal': Math.random() < 0.5 ? Math.floor(Math.random() * 3) + 1 : 0,
+                    'nails': Math.random() < 0.6 ? Math.floor(Math.random() * 8) + 2 : 0,
+                    'rope': Math.random() < 0.2 ? 1 : 0,
+                    'fat': Math.random() < 0.1 ? Math.floor(Math.random() * 2) + 1 : 0,
+                };
+                barrel.looted = false;
+                objects.push(barrel);
+                interactables.push(barrel);
+            }
+
+            // Helper function to create walls with doorways without BSP/CSG
+                       // Helper function to create walls with doorways without BSP/CSG
+           function createDoorway(wallWidth, wallHeight, doorWidth, doorHeight, wallThickness, x, y, z, material, rotationY = 0) {
+    const wallGroup = new THREE.Group();
+    wallGroup.position.set(x, y, z); // Set group position
+    wallGroup.rotation.y = rotationY; // Set group rotation
+    wallGroup.name = "DoorwayWallSegment"; // Give it a name
+
+    // Ensure door is not wider/taller than wall
+    doorWidth = Math.min(doorWidth, wallWidth - 0.1); // Leave small margin
+    doorHeight = Math.min(doorHeight, wallHeight - 0.1);
+
+    // Calculate dimensions of wall parts
+    const sideWallWidth = Math.max(0, (wallWidth - doorWidth) / 2);
+    const topWallHeight = Math.max(0, wallHeight - doorHeight);
+
+    // --- Create Meshes ---
+    // Left section of wall
+    if (sideWallWidth > 0.01) {
+        const leftWallGeometry = new THREE.BoxGeometry(sideWallWidth, wallHeight, wallThickness);
+        const leftWall = new THREE.Mesh(leftWallGeometry, material);
+        leftWall.position.set(-(doorWidth / 2) - (sideWallWidth / 2), wallHeight / 2, 0);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        leftWall.isCollidable = true; // Mark individual parts as collidable
+        leftWall.name = "Doorway_LeftWall";
+        wallGroup.add(leftWall);
+    }
+
+    // Right section of wall
+    if (sideWallWidth > 0.01) {
+        const rightWallGeometry = new THREE.BoxGeometry(sideWallWidth, wallHeight, wallThickness);
+        const rightWall = new THREE.Mesh(rightWallGeometry, material);
+        rightWall.position.set((doorWidth / 2) + (sideWallWidth / 2), wallHeight / 2, 0);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        rightWall.isCollidable = true;
+        rightWall.name = "Doorway_RightWall";
+        wallGroup.add(rightWall);
+    }
+
+    // Top section of wall (above door)
+    if (topWallHeight > 0.01) {
+        const topWallGeometry = new THREE.BoxGeometry(doorWidth, topWallHeight, wallThickness);
+        const topWall = new THREE.Mesh(topWallGeometry, material);
+        topWall.position.set(0, doorHeight + (topWallHeight / 2), 0);
+        topWall.castShadow = true;
+        topWall.receiveShadow = true;
+        topWall.isCollidable = true;
+        topWall.name = "Doorway_TopWall";
+        wallGroup.add(topWall);
+    }
+
+    // Mark the group itself as not directly collidable, rely on parts
+    wallGroup.isCollidable = false;
+
+    // Don't add individual wall parts to objects array here
+    // This will be done after the parent adds the wallGroup to the scene
+    // and the world matrices are properly updated
+
+    return wallGroup; // Return the group itself
+}
+            function createSolidWall(width, height, thickness, x, y, z, material, rotationY = 0) {
+                 const wallGeometry = new THREE.BoxGeometry(width, height, thickness);
+                 const wall = new THREE.Mesh(wallGeometry, material);
+                 wall.position.set(x, y + height / 2, z);
+                 wall.rotation.y = rotationY;
+                 wall.castShadow = true;
+                 wall.receiveShadow = true;
+                 wall.isCollidable = true;
+                 scene.add(wall);
+                 objects.push(wall);
+                 return wall;
+            }
+
+            // --- Use the corrected createBuilding function ---
+           // Fix in the createBuilding function
+function createBuilding(x, y, z) {
+    const buildingGroup = new THREE.Group(); // Group all building parts
+    buildingGroup.position.set(x, y, z); // Set pivot point for the whole building
+    buildingGroup.name = "Building";
+
+    // Define building dimensions
+    const width = Math.random() * 8 + 10;
+    const height = Math.random() * 2 + 5;
+    const depth = Math.random() * 8 + 10;
+
+    // Create walls material
+    const wallMaterial = new THREE.MeshStandardMaterial({
+        color: 0xC0C0C0,  // Silver-ish gray
+        roughness: 0.9,
+        metalness: 0.1
+    });
+
+    // Create floor (relative to building group origin)
+    const floorGeometry = new THREE.BoxGeometry(width, 0.2, depth);
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, roughness: 0.8 }); // Concrete color
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.position.set(0, 0.1, 0); // Position floor slightly above group y=0
+    floor.receiveShadow = true;
+    floor.name = 'building_floor';
+    floor.isCollidable = true; // Floors should be collidable
+    buildingGroup.add(floor);
+    objects.push(floor); // Add floor for placement and collision
+
+    // Create walls (relative to building group origin)
+    const wallThickness = 0.3;
+    const halfW = width / 2;
+    const halfD = depth / 2;
+
+    // Front wall with door
+    const doorWidth = 1.5;
+    const doorHeight = 3.0;
+
+    // --- CORRECTED CALL ---
+    // Create the doorway group
+    const frontWallWithDoor = createDoorway(
+        width, height, doorWidth, doorHeight, wallThickness,
+        0, 0, halfD - wallThickness / 2, // Position relative to group center
+        wallMaterial, 0 // No Y rotation needed here
+    );
+    // Add the entire doorway group to the building group
+    buildingGroup.add(frontWallWithDoor);
+    // --- END CORRECTION ---
+
+    // Back wall (solid) - Use createSolidWall which returns the mesh directly
+    const backWall = createSolidWall(
+        width, height, wallThickness,
+        0, 0, -halfD + wallThickness / 2, // Relative position
+        wallMaterial, 0
+    );
+    buildingGroup.add(backWall); // Add the solid wall mesh
+
+    // Left wall (solid)
+    const leftWall = createSolidWall(
+       depth, height, wallThickness, // Width is building depth for side walls
+       -halfW + wallThickness / 2, 0, 0, // Relative position
+       wallMaterial, Math.PI / 2 // Rotate 90 degrees around y
+    );
+    buildingGroup.add(leftWall);
+
+    // Right wall (solid)
+    const rightWall = createSolidWall(
+       depth, height, wallThickness,
+       halfW - wallThickness / 2, 0, 0, // Relative position
+       wallMaterial, Math.PI / 2
+    );
+    buildingGroup.add(rightWall);
+
+    // Simple Roof (relative to building group origin)
+    const roofGeometry = new THREE.BoxGeometry(width + wallThickness, 0.2, depth + wallThickness); // Slightly overhang
+    const roof = new THREE.Mesh(roofGeometry, floorMaterial); // Use floor material for roof
+    roof.position.set(0, height + 0.1, 0);
+    roof.castShadow = true;
+    roof.isCollidable = true; // Roof prevents jumping out
+    buildingGroup.add(roof);
+    objects.push(roof);
+
+    scene.add(buildingGroup); // Add the complete building group to the scene
+
+    // FIXED: Now add the doorway's individual wall parts to the objects list
+    // after the building group has been added to the scene
+    frontWallWithDoor.children.forEach(child => {
+        if (child.isCollidable) {
+            objects.push(child);
+        }
+    });
+
+    // Create containers inside (use building group's world coords)
+    const numContainers = Math.floor(Math.random() * 3) + 1; // 1 to 3 containers
+    for (let i = 0; i < numContainers; i++) {
+        createContainer(
+            x + (Math.random() - 0.5) * (width - 2), // Random position within building bounds
+            y + 0.2, // On the floor (absolute Y)
+            z + (Math.random() - 0.5) * (depth - 2)
+        );
+    }
+    console.log(`Created building at ${x.toFixed(1)}, ${z.toFixed(1)}`); // Use toFixed for cleaner logs
+}
+
+            function createContainer(x, y, z) {
+                // Randomly choose container type
+                 let containerGeometry;
+                 let containerMaterial;
+                 const type = Math.random();
+                 let containerHeight = 1.0; // Default height
+
+                 if (type < 0.5) { // Wooden Crate
+                     containerHeight = 1.0;
+                     containerGeometry = new THREE.BoxGeometry(1.2, containerHeight, 1.2);
+                     containerMaterial = new THREE.MeshStandardMaterial({ color: 0x966F33, roughness: 0.8, metalness: 0.1 }); // Wood color
+                 } else { // Metal Locker
+                     containerHeight = 1.8;
+                     containerGeometry = new THREE.BoxGeometry(0.8, containerHeight, 0.6);
+                     containerMaterial = new THREE.MeshStandardMaterial({ color: 0x778899, roughness: 0.5, metalness: 0.6 }); // Light slate gray
+                 }
+
+                const container = new THREE.Mesh(containerGeometry, containerMaterial);
+                // Position based on calculated height, ensuring bottom is at y
+                container.position.set(x, y + containerHeight / 2, z);
+                container.rotation.y = Math.random() * Math.PI / 4; // Slight random rotation
+                container.castShadow = true;
+                container.receiveShadow = true;
+                container.name = (type < 0.5) ? "Crate" : "Locker";
+                scene.add(container);
+
+                container.isCollidable = true;
+                container.isInteractable = true;
+                container.interactionType = 'search';
+                container.loot = { // Loot based on container type maybe
+                    'wood': (type < 0.5 && Math.random() < 0.4) ? Math.floor(Math.random() * 4) + 1 : 0, // More wood in crates
+                    'metal': (type >= 0.5 && Math.random() < 0.6) ? Math.floor(Math.random() * 4) + 1 : 0, // More metal in lockers
+                    'nails': Math.random() < 0.5 ? Math.floor(Math.random() * 10) + 3 : 0,
+                    'leather': Math.random() < 0.2 ? Math.floor(Math.random() * 2) + 1 : 0,
+                    'rope': Math.random() < 0.3 ? 1 : 0,
+                    'fat': Math.random() < 0.1 ? Math.floor(Math.random() * 2) + 1 : 0,
+                };
+                container.looted = false;
+                objects.push(container);
+                interactables.push(container);
+            }
+
+            function createAnimal(x, y, z) {
+                 const animalGroup = new THREE.Group();
+                 animalGroup.position.set(x, y, z);
+                 animalGroup.name = "Animal";
+
+                 // Simple animal model (e.g., deer-like) using capsules for smoother look
+                 const bodyLength = 1.5 + Math.random() * 0.5;
+                 const bodyRadius = (0.6 + Math.random() * 0.2) / 2;
+                 const bodyHeight = 0.8 + Math.random() * 0.2; // This is more like vertical thickness now
+                 const legHeight = 0.6;
+                 const legRadius = 0.1;
+
+                 const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x987654, roughness: 0.9, metalness: 0.1 }); // Brownish
+
+                 // Body (Capsule or Box)
+                 // Using Box for simplicity matching original, place it correctly
+                 const bodyGeometry = new THREE.BoxGeometry(bodyRadius * 2, bodyHeight, bodyLength);
+                 const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                 body.position.y = legHeight + bodyHeight / 2; // Body starts above legs
+                 body.castShadow = true;
+                 body.receiveShadow = true;
+                 animalGroup.add(body);
+
+                 // Head
+                 const headSize = 0.5 + Math.random() * 0.1;
+                 const headGeometry = new THREE.BoxGeometry(headSize, headSize, headSize * 1.2);
+                 const head = new THREE.Mesh(headGeometry, bodyMaterial);
+                  // Position relative to body center, offset forward and slightly up
+                 head.position.set(0, body.position.y + bodyHeight * 0.1, bodyLength / 2 + headSize * 0.4);
+                 animalGroup.add(head);
+
+                 // Legs (Cylinders)
+                 const legGeometry = new THREE.CylinderGeometry(legRadius, legRadius * 0.8, legHeight, 6);
+                 const legPositions = [
+                     { x: bodyRadius * 0.8, z: bodyLength / 2.5 }, { x: -bodyRadius * 0.8, z: bodyLength / 2.5 }, // Front legs
+                     { x: bodyRadius * 0.8, z: -bodyLength / 2.5 }, { x: -bodyRadius * 0.8, z: -bodyLength / 2.5 } // Back legs
+                 ];
+
+                 legPositions.forEach(pos => {
+                     const leg = new THREE.Mesh(legGeometry, bodyMaterial);
+                     // Legs start from y=0 up to the bottom of the body
+                     leg.position.set(pos.x, legHeight / 2, pos.z);
+                     animalGroup.add(leg);
+                 });
+
+                 scene.add(animalGroup);
+
+                 // Animal properties - attach to the group
+                 animalGroup.isAnimal = true;
+                 animalGroup.movementSpeed = 0.02 + Math.random() * 0.02; // Wander speed factor
+                 animalGroup.targetPosition = new THREE.Vector3(
+                     x + Math.random() * 60 - 30, // Wander range
+                     y, // Stay on ground level
+                     z + Math.random() * 60 - 30
+                 );
+                 animalGroup.movementTimeout = Math.random() * 6000 + 4000; // Time between changing direction
+                 animalGroup.lastMovementUpdate = Date.now();
+                 animalGroup.currentSpeed = 0; // Actual speed, can be used for acceleration
+
+                 animalGroup.isInteractable = true;
+                 animalGroup.resourceType = 'meat'; // Primary resource type for interaction check
+                 animalGroup.interactionType = 'hunt';
+                 animalGroup.requiredTool = 'knife';
+                 animalGroup.loot = {
+                     'meat': Math.floor(Math.random() * 3) + 1,
+                     'leather': Math.floor(Math.random() * 2) + 1,
+                     'fat': Math.floor(Math.random() * 2) + 1,
+                 };
+                 interactables.push(animalGroup);
+                 // Animals are not collidable in this setup
+                 // animalGroup.isCollidable = false;
+                 animals.push(animalGroup); // Add group to animals array for AI updates
+            }
+
+
+            // --- Interaction and Gathering ---
+
+             const gatherRaycaster = new THREE.Raycaster();
+             const interactionDistance = 4.0; // Max distance to interact/gather
+
+            function gatherResource() {
+                if (gameState.showInventory || gameState.placing || gameState.isGameOver) return;
+
+                 gatherRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera); // Ray from center of screen
+
+                // Filter potential targets based on interaction type for gathering
+                const potentialTargets = interactables.filter(obj =>
+                     obj.interactionType === 'chop' || obj.interactionType === 'mine' ||
+                     obj.interactionType === 'harvest' || obj.interactionType === 'hunt' ||
+                     obj.interactionType === 'collect' || obj.interactionType === 'fill'
+                 );
+
+                 // Intersect with the filtered list, checking descendants
+                 const intersects = gatherRaycaster.intersectObjects(potentialTargets, true);
+
+                if (intersects.length > 0 && intersects[0].distance < interactionDistance) {
+                     // Get the top-level interactable object (the group or the mesh itself that has the isInteractable flag)
+                     let target = intersects[0].object;
+                     while (target.parent && target.parent !== scene && !target.isInteractable) { // Go up until we find the interactable ancestor or hit the scene
+                         target = target.parent;
+                     }
+
+                     // Ensure the final target is actually in our interactables list and has the expected properties
+                     if (!interactables.includes(target) || !target.interactionType) {
+                          console.warn("Ray hit object, but couldn't find registered interactable ancestor:", intersects[0].object.name);
+                          return;
+                      }
+
+                     // --- Tool Check ---
+                     const currentTool = gameState.quickBar[gameState.selectedSlot]?.item;
+                     if (target.requiredTool && currentTool !== target.requiredTool) {
+                         showNotification(`Requires ${target.requiredTool}`, 1500);
+                         return;
+                     }
+
+                     // --- Handle Specific Interaction Types ---
+
+                     // Fill Canteen
+                     if (target.interactionType === 'fill') {
+                         if (currentTool === 'canteen') {
+                              if (gameState.inventory.canteen > 0) {
+                                   if (!gameState.waterPurified) {
+                                       showNotification('Filled canteen with water. Boil at a campfire.', 2500);
+                                       // No actual state change needed if 'waterPurified' tracks state *after* boiling
+                                       // If canteen item itself tracked state, you'd modify it here.
+                                   } else {
+                                       showNotification('Canteen already has purified water.', 2000);
+                                   }
+                              } else {
+                                   showNotification('You need a canteen.', 1500);
+                              }
+                         } else {
+                             showNotification('Requires canteen', 1500);
+                         }
+                         return; // Stop after attempting fill
+                     }
+
+                     // Collect Item (like nails, scrap metal)
+                     if (target.interactionType === 'collect') {
+                         let amount = target.amount || 1; // Use stored amount (nails) or default to 1 (scrap)
+                         if (addInventoryItem(target.resourceType, amount)) {
+                             removeFromWorld(target); // Remove the object after successful collection
+                         } else {
+                              console.error("Failed to add collected item to inventory."); // Should not happen if resourceType is valid
+                         }
+                         return; // Stop after collecting
+                     }
+
+                     // Hunt Animal
+                     if (target.interactionType === 'hunt') {
+                          if (target.isAnimal) {
+                               let lootMessages = [];
+                               let success = true;
+                               Object.keys(target.loot).forEach(item => {
+                                   const amount = target.loot[item];
+                                   if (amount > 0) {
+                                       if (addInventoryItem(item, amount)) {
+                                           lootMessages.push(`+${amount} ${item}`);
+                                       } else {
+                                            success = false; // Should not happen
+                                            console.error(`Failed to add looted item ${item} to inventory.`);
+                                       }
+                                   }
+                               });
+                               if (success) {
+                                   showNotification(`Harvested animal: ${lootMessages.join(', ')}`, 3000);
+                                   removeFromWorld(target); // Remove the animal
+                               }
+                          }
+                          return; // Stop after hunting
+                     }
+
+                     // Chop, Mine, Harvest (Resources from persistent objects)
+                      if (['chop', 'mine', 'harvest'].includes(target.interactionType)) {
+                         const amount = Math.floor(Math.random() * 2) + 1; // Give 1 or 2
+                         addInventoryItem(target.resourceType, amount);
+                          // Optionally add visual/audio feedback (hit effect, sound)
+                          // These objects (trees, rocks, grass patches) are not removed immediately
+                          // Could add health to them and remove after enough hits later.
+                          return; // Stop after gathering one pulse
+                      }
+
+                } else {
+                     // Optional: Swing tool animation even if hitting nothing?
+                }
+            }
+
+             function removeFromWorld(target) {
+                 if (!target) return;
+
+                 const wasInteractable = interactables.includes(target);
+                 const wasAnimal = animals.includes(target);
+
+                 // Helper to remove from arrays
+                 const removeFromArray = (arr, item) => {
+                     const index = arr.indexOf(item);
+                     if (index !== -1) arr.splice(index, 1);
+                     return index !== -1;
+                 };
+
+                 // Remove from scene and specific lists
+                 scene.remove(target);
+                 let removedFromObjects = false;
+
+                 // If target is a group, remove its collidable children from objects array
+                 if (target.isGroup) {
+                      target.traverse(child => {
+                          if (removeFromArray(objects, child)) {
+                              removedFromObjects = true;
+                          }
+                      });
+                 } else {
+                     // If target is a single mesh, remove it directly
+                      if (removeFromArray(objects, target)) {
+                          removedFromObjects = true;
+                      }
+                 }
+
+
+                 if (wasInteractable) removeFromArray(interactables, target);
+                 if (wasAnimal) removeFromArray(animals, target);
+
+
+                 // If it was the current interactable target, clear it
+                 if (gameState.interactable === target) {
+                     gameState.interactable = null;
+                     hideInteractionPrompt();
+                 }
+
+                 console.log(`Removed ${target.name || 'object'} from world. Interactable: ${wasInteractable}, Animal: ${wasAnimal}, Collidable: ${removedFromObjects}`);
+
+                  // Dispose geometry/material if this is the last reference (complex to track perfectly)
+                  // Basic disposal for the removed object:
+                  if (target.geometry) target.geometry.dispose();
+                  if (target.material) {
+                      if (Array.isArray(target.material)) {
+                          target.material.forEach(m => m.dispose());
+                      } else {
+                          target.material.dispose();
+                      }
+                  }
+             }
+
+
+            function interact() {
+                 if (!gameState.interactable || gameState.showInventory || gameState.isGameOver || gameState.placing) return;
+
+                const target = gameState.interactable;
+
+                 // Search Container
+                if (target.interactionType === 'search') {
+                     if (!target.looted) {
+                         let lootText = 'Found: ';
+                         let itemsFound = 0;
+                         Object.keys(target.loot).forEach(item => {
+                             const amount = target.loot[item];
+                             if (amount > 0) {
+                                 if(addInventoryItem(item, amount)) {
+                                     lootText += `${amount} ${item}, `;
+                                     itemsFound += amount;
+                                 } else {
+                                     console.error(`Failed to add searched item ${item} to inventory.`);
+                                 }
+                             }
+                         });
+
+                         if (itemsFound > 0) {
+                             lootText = lootText.slice(0, -2); // Remove trailing comma and space
+                         } else {
+                             lootText = 'Found nothing.';
+                         }
+
+                         showNotification(lootText, 3000);
+                         target.looted = true; // Mark as looted
+
+                         // Optionally change appearance (e.g., open lid, change color)
+                         if (target.material) {
+                              if (Array.isArray(target.material)) {
+                                   target.material.forEach(m => m.color.set(0x555555)); // Darken looted container parts
+                              } else {
+                                   target.material.color.set(0x555555); // Darken looted container
+                              }
+                          }
+
+                         // Hide prompt, clear target AFTER showing notification
+                         hideInteractionPrompt();
+                         gameState.interactable = null;
+                     } else {
+                          showNotification('Already searched.', 1500);
+                          hideInteractionPrompt(); // Hide prompt if trying to search empty
+                          gameState.interactable = null;
+                     }
+                }
+                 // Use Structure (e.g., Campfire, Forge, Crafting Table)
+                 else if (target.interactionType === 'use') {
+                      if (target.structureType === 'campfire') {
+                           useCampfire(); // Specific action for campfire
+                      } else if (target.structureType === 'craftingtable') {
+                           // Maybe open a different crafting UI or enable more recipes?
+                           showNotification('Used Crafting Table. (Opens advanced crafting - not implemented)', 3000);
+                      } else if (target.structureType === 'forge') {
+                           // Maybe open smelting UI?
+                           showNotification('Used Forge. (Opens smelting - not implemented)', 3000);
+                      } else {
+                           showNotification(`Used ${target.structureType}.`, 2000);
+                      }
+                       // Keep interaction prompt or hide after use? Depends on design.
+                       // hideInteractionPrompt();
+                       // gameState.interactable = null;
+                 }
+                 // Add other interaction types here if needed
+            }
+
+            // --- UI Functions ---
+
+            function showNotification(message, duration = 2000) {
+                // Remove existing notification first
+                const existingNotification = document.body.querySelector('.notification');
+                if (existingNotification) {
+                    document.body.removeChild(existingNotification);
+                }
+
+                const notification = document.createElement('div');
+                notification.className = 'notification'; // Use class for styling
+                notification.textContent = message;
+                document.body.appendChild(notification); // Append to body to ensure visibility
+
+                 // Ensure it's removed even if duration is short / game state changes rapidly
+                 setTimeout(() => {
+                    if (notification && notification.parentNode === document.body) {
+                         try {
+                             document.body.removeChild(notification);
+                         } catch (e) { /* Ignore if already removed */ }
+                     }
+                 }, duration);
+            }
+
+            function showInteractionPrompt(message) {
+                const prompt = document.getElementById('interaction-prompt');
+                prompt.textContent = message;
+                prompt.style.display = 'block';
+            }
+
+            function hideInteractionPrompt() {
+                document.getElementById('interaction-prompt').style.display = 'none';
+            }
+
+            function selectQuickSlot(index) {
+                if (index < 0 || index >= gameState.quickBar.length) return; // Invalid index
+                if (gameState.selectedSlot === index) return; // Already selected
+
+                const currentSelected = document.querySelector('.quick-slot.selected');
+                if (currentSelected) {
+                    currentSelected.classList.remove('selected');
+                }
+
+                const newSelected = document.querySelector(`.quick-slot[data-slot="${index}"]`);
+                if (newSelected) {
+                    newSelected.classList.add('selected');
+                }
+                gameState.selectedSlot = index;
+                 console.log("Selected quick slot:", index, gameState.quickBar[index]);
+            }
+
+            function toggleInventory() {
+                gameState.showInventory = !gameState.showInventory;
+                document.getElementById('inventory').style.display = gameState.showInventory ? 'block' : 'none';
+
+                if (gameState.showInventory) {
+                     unlockPointer(); // Release pointer lock when inventory opens
+                     updateInventoryUI(); // Refresh inventory view
+                     // Reset crafting view state if needed
+                     gameState.showCrafting = false;
+                     document.getElementById('crafting-menu').style.display = 'none';
+                     document.getElementById('toggle-crafting').textContent = 'Show Crafting';
+                 } else {
+                      // Only re-lock if not game over and not currently placing something
+                      if (!gameState.isGameOver && !gameState.placing) {
+                          lockPointer(); // Re-lock pointer when closing
+                      }
+                 }
+            }
+
+            function updateInventoryUI() {
+                 const inventoryGrid = document.getElementById('inventory-grid');
+                 const inventorySlots = inventoryGrid.querySelectorAll('.inventory-slot');
+
+                 // Clear existing slots content first
+                 inventorySlots.forEach(slot => {
+                     slot.innerHTML = ''; // Clear text and children (like count)
+                     slot.dataset.item = ''; // Clear item data
+                     slot.title = ''; // Clear tooltip
+                 });
+
+                 let slotIndex = 0;
+
+                 // Iterate through all known items in gameState.inventory, sorted alphabetically
+                 const sortedItems = Object.keys(gameState.inventory).sort();
+
+                 sortedItems.forEach(item => {
+                     const count = gameState.inventory[item];
+                     if (count > 0 && slotIndex < inventorySlots.length) {
+                         const slot = inventorySlots[slotIndex];
+                         const itemName = item.charAt(0).toUpperCase() + item.slice(1); // Capitalize
+                         slot.textContent = itemName;
+                         slot.dataset.item = item; // Store item type for potential drag/drop later
+                         slot.title = itemName; // Tooltip for full name
+
+                         // Add count element only if count > 1 OR if it's a tool/non-stackable (always show 1?) - Let's show > 1
+                         if (count > 1) {
+                             const countElement = document.createElement('div');
+                             countElement.className = 'inventory-slot-count';
+                             countElement.textContent = count;
+                             slot.appendChild(countElement);
+                         }
+                         slotIndex++;
+                     }
+                 });
+            }
+
+             function updateQuickBarUI() {
+                 gameState.quickBar.forEach((slotData, index) => {
+                     const quickSlot = document.querySelector(`.quick-slot[data-slot="${index}"]`);
+                     if (!quickSlot) return;
+
+                     // Clear previous content and count
+                     quickSlot.textContent = '';
+                     const prevCount = quickSlot.querySelector('.quick-slot-count');
+                     if (prevCount) quickSlot.removeChild(prevCount);
+                     quickSlot.title = ''; // Clear tooltip
+
+                     if (slotData && slotData.item) { // Ensure slotData and item exist
+                         // Display item name (shortened if needed)
+                         const itemName = slotData.item.charAt(0).toUpperCase() + slotData.item.slice(1);
+                         quickSlot.textContent = itemName;
+                         quickSlot.title = itemName; // Tooltip for full name
+
+                         // Add count if greater than 1 (or maybe always 1 for tools?)
+                         // Let's display count only if > 1 for resources, and never for tools like axe/pickaxe
+                         const isTool = ['axe', 'pickaxe', 'knife', 'canteen'].includes(slotData.item);
+                         if (slotData.count > 1 && !isTool) {
+                             const countElement = document.createElement('div');
+                             countElement.className = 'quick-slot-count';
+                             countElement.textContent = slotData.count;
+                             quickSlot.appendChild(countElement);
+                         } else if (isTool && slotData.count < 1) {
+                              // If a tool's count drops to 0 (shouldn't happen with current logic, but future proof)
+                              quickSlot.textContent = ''; // Clear slot if tool is gone
+                              quickSlot.title = '';
+                         }
+                     }
+                 });
+             }
+
+            // --- Crafting and Item Management ---
+
+            function addInventoryItem(item, count = 1) {
+                 if (count <= 0) return false; // Don't add zero or negative
+                 if (!gameState.inventory.hasOwnProperty(item)) {
+                     console.warn(`Attempted to add unknown item: ${item}`);
+                     // Optionally add the item key if it should be dynamic (careful with this)
+                     // gameState.inventory[item] = 0;
+                     return false; // Indicate failure
+                 }
+                 gameState.inventory[item] += count;
+                 showNotification(`+${count} ${item.replace(/([A-Z])/g, ' $1').trim()}`, 1500); // Add space before capitals for display
+                 updateInventoryUI(); // Update if inventory is open
+                 updateQuickBarIfNeeded(item); // Update quick bar if the added item is there
+
+                 // Check crafting recipes if inventory is open and crafting menu is visible
+                 if (gameState.showInventory && gameState.showCrafting) {
+                     updateCraftingMenuAvailability();
+                 }
+                 return true; // Indicate success
+            }
+
+            function removeInventoryItem(item, count = 1) {
+                 if (count <= 0) return false; // Don't remove zero or negative
+                 if (!gameState.inventory.hasOwnProperty(item) || gameState.inventory[item] < count) {
+                     console.warn(`Attempted to remove insufficient item: ${item} (Have: ${gameState.inventory[item] || 0}, Need: ${count})`);
+                     return false; // Indicate failure
+                 }
+                 gameState.inventory[item] -= count;
+                 // Don't show negative notification for removal during crafting etc.
+                 updateInventoryUI(); // Update if inventory is open
+                 updateQuickBarIfNeeded(item); // Update quick bar if the removed item is there
+
+                 // Check crafting recipes if inventory is open and crafting menu is visible
+                 if (gameState.showInventory && gameState.showCrafting) {
+                     updateCraftingMenuAvailability();
+                 }
+                 return true; // Indicate success
+            }
+
+            function updateQuickBarIfNeeded(item) {
+                let itemInQuickBar = false;
+                let indexToUpdate = -1;
+                for (let i = 0; i < gameState.quickBar.length; i++) {
+                    if (gameState.quickBar[i] && gameState.quickBar[i].item === item) {
+                        itemInQuickBar = true;
+                        indexToUpdate = i;
+                        break;
+                    }
+                }
+
+                if (itemInQuickBar) {
+                    // Update the count in the quick bar slot based on inventory
+                    const inventoryCount = gameState.inventory[item];
+                    if (inventoryCount > 0) {
+                        // Update count - UI function will handle display logic (show > 1 or not)
+                        gameState.quickBar[indexToUpdate].count = inventoryCount;
+                    } else {
+                        // Remove from quick bar if count is zero
+                        gameState.quickBar[indexToUpdate] = null;
+                    }
+                    updateQuickBarUI(); // Refresh the quick bar display
+                }
+                 // Potential improvement: If an item is added and there's an empty quick bar slot,
+                 // automatically add it? Or allow drag-and-drop from inventory.
+            }
+
+            // Define crafting recipes more formally
+            const recipes = {
+                axe: { name: "Axe", ingredients: { wood: 2, stone: 1 }, result: { item: 'axe', count: 1 } },
+                pickaxe: { name: "Pickaxe", ingredients: { wood: 2, stone: 3 }, result: { item: 'pickaxe', count: 1 } },
+                campfire: { name: "Campfire", ingredients: { wood: 5, stone: 3 }, result: { item: 'campfire', count: 1 }, placeable: true },
+                craftingtable: { name: "Crafting Table", ingredients: { wood: 10, nails: 4 }, result: { item: 'craftingtable', count: 1 }, placeable: true },
+                forge: { name: "Forge", ingredients: { stone: 15, metal: 5 }, result: { item: 'forge', count: 1 }, placeable: true },
+                rope: { name: "Rope", ingredients: { grass: 6 }, result: { item: 'rope', count: 1 } },
+                cookedMeat: { name: "Cooked Meat", ingredients: { meat: 1 }, result: { item: 'cookedMeat', count: 1 }, requires: 'campfire' }, // Requires nearby structure
+                purifiedWater: { name: "Purified Water", ingredients: { canteen: 1 }, result: { item: 'canteen', count: 1, state: 'purified' }, requires: 'campfire' } // Special case: modifies existing item state
+                // Add knife recipe? Maybe metal + wood?
+                // knife: { name: "Knife", ingredients: { wood: 1, metal: 1 }, result: { item: 'knife', count: 1 } },
+            };
+
+            function hasIngredients(recipeName) {
+                const recipe = recipes[recipeName];
+                if (!recipe || !recipe.ingredients) return false; // Recipe requires ingredients
+
+                for (const ingredient in recipe.ingredients) {
+                    if (!gameState.inventory[ingredient] || gameState.inventory[ingredient] < recipe.ingredients[ingredient]) {
+                        return false; // Not enough of this ingredient
+                    }
+                }
+                return true; // Has all ingredients
+            }
+
+             function isNearRequiredStructure(requiredType) {
+                 if (!requiredType) return true; // No requirement
+
+                 // Check if player is near a placed structure of the required type
+                 const checkRadius = 5; // How close the player needs to be
+                 for (const obj of interactables) {
+                      // Check if it's a placed structure matching the type
+                     if (obj.placed && obj.structureType === requiredType) {
+                         // Use player's feet position for distance check for better accuracy near structures
+                         const playerFeetPos = player.position.clone().setY(player.position.y - player.height + 0.1);
+                         const distance = playerFeetPos.distanceTo(obj.position);
+                         if (distance <= checkRadius) {
+                             return obj; // Return the nearby structure object
+                         }
+                     }
+                 }
+                 return null; // No structure of required type nearby
+             }
+
+            function craftItem(recipeName) {
+                 if (gameState.isGameOver) return;
+                const recipe = recipes[recipeName];
+                if (!recipe) {
+                    showNotification('Unknown recipe.', 1500);
+                    return;
+                }
+
+                // 1. Check if near required structure (e.g., campfire)
+                const nearbyStructure = isNearRequiredStructure(recipe.requires);
+                if (recipe.requires && !nearbyStructure) {
+                    showNotification(`Requires nearby ${recipe.requires}`, 2000);
+                    return;
+                }
+
+                // --- Special Case: Purifying Water ---
+                if (recipeName === 'purifiedWater') {
+                     // Check ingredient: Do we have a canteen?
+                     if (gameState.inventory.canteen < 1) {
+                          showNotification('Need a canteen first.', 2000);
+                          return;
+                      }
+                      // Check state: Is the water already purified?
+                     if (gameState.waterPurified) {
+                         showNotification('Canteen already contains purified water.', 2000);
+                         return;
+                     }
+                     // Requires campfire (already checked above)
+
+                     // Perform purification
+                     gameState.waterPurified = true; // Set canteen state
+                     showNotification('Purified water in canteen!', 2000);
+                     // No ingredient consumption/addition, just state change
+                     updateCraftingMenuAvailability(); // Update UI
+                     updateQuickBarIfNeeded('canteen'); // Update quick bar if needed (maybe show status?)
+                     return; // Handled purification
+                }
+
+                // --- Special Case: Cooking Meat ---
+                if (recipeName === 'cookedMeat') {
+                    // Check ingredient: Do we have raw meat?
+                    if (gameState.inventory.meat < recipe.ingredients.meat) {
+                        showNotification('Not enough raw meat.', 1500);
+                        return;
+                    }
+                    // Requires campfire (already checked above)
+
+                    // Perform cooking
+                     if (removeInventoryItem('meat', recipe.ingredients.meat)) { // Consume raw meat
+                         if (addInventoryItem('cookedMeat', recipe.result.count)) { // Add cooked meat
+                              showNotification(`Crafted ${recipe.result.count} Cooked Meat`, 2000);
+                         } else {
+                              // Rollback? Add raw meat back if adding cooked failed? Unlikely.
+                              console.error("Failed to add cooked meat after consuming raw meat.");
+                         }
+                     } else {
+                          // Should not happen if inventory check passed, but safeguard.
+                          console.error("Failed to remove raw meat for cooking.");
+                     }
+                     updateCraftingMenuAvailability(); // Update UI
+                     return; // Handled cooking
+                }
+
+
+                // --- Standard Crafting Logic ---
+
+                // 2. Check if player has ingredients
+                if (!hasIngredients(recipeName)) {
+                    showNotification('Not enough ingredients.', 1500);
+                    return;
+                }
+
+                // 3. Consume ingredients
+                let consumedSuccessfully = true;
+                for (const ingredient in recipe.ingredients) {
+                    if (!removeInventoryItem(ingredient, recipe.ingredients[ingredient])) {
+                        consumedSuccessfully = false;
+                        // This should not happen if hasIngredients check passed, but good failsafe
+                        console.error(`Crafting failed: Could not consume ingredient ${ingredient} for ${recipeName}`);
+                        // TODO: Consider rolling back previously consumed items for this recipe if possible? (Complex)
+                        showNotification(`Crafting error: Failed to consume ${ingredient}.`, 2000);
+                        break;
+                    }
+                }
+
+                // 4. Add resulting item IF consumption was successful
+                if (consumedSuccessfully) {
+                    if (addInventoryItem(recipe.result.item, recipe.result.count)) {
+                        showNotification(`Crafted ${recipe.result.count} ${recipe.name}`, 2000);
+                    } else {
+                        // Failed to add result - maybe inventory full? (Need inventory limit first)
+                        // Rollback consumed items?
+                         console.error(`Crafting error: Failed to add result item ${recipe.result.item} for ${recipeName}`);
+                         showNotification(`Crafting error: Could not add ${recipe.name} to inventory.`, 2000);
+                    }
+                }
+
+                // 5. Update Crafting Menu UI (regardless of success/failure of this craft)
+                updateCraftingMenuAvailability();
+            }
+
+             function updateCraftingMenuAvailability() {
+                 document.querySelectorAll('.crafting-recipe').forEach(recipeElement => {
+                     const recipeName = recipeElement.dataset.recipe;
+                     const recipe = recipes[recipeName];
+                     if (!recipe) return;
+
+                     let canCraft = true;
+                     let requirements = [];
+
+                     // Check Ingredients
+                     if (recipe.ingredients) {
+                          // Special check for water: Need canteen AND water must be unpurified
+                         if (recipeName === 'purifiedWater') {
+                              if (gameState.inventory.canteen < 1) {
+                                  canCraft = false;
+                                  requirements.push("Requires Canteen");
+                              }
+                              if (gameState.waterPurified) {
+                                   canCraft = false;
+                                   requirements.push("Water already purified");
+                               }
+                          } else {
+                              // Standard ingredient check
+                              for (const ingredient in recipe.ingredients) {
+                                  if (!gameState.inventory[ingredient] || gameState.inventory[ingredient] < recipe.ingredients[ingredient]) {
+                                      canCraft = false;
+                                      requirements.push(`Needs ${recipe.ingredients[ingredient]} ${ingredient}`);
+                                  }
+                              }
+                          }
+                     }
+
+
+                     // Check nearby structure requirement
+                     if (recipe.requires && !isNearRequiredStructure(recipe.requires)) {
+                         canCraft = false;
+                         requirements.push(`Requires nearby ${recipe.requires}`);
+                     }
+
+                     // Update visual style and tooltip
+                     if (canCraft) {
+                         recipeElement.style.opacity = '1';
+                         recipeElement.style.cursor = 'pointer';
+                         recipeElement.title = `Click to craft ${recipe.name}`; // Clear requirement tooltip if met
+                     } else {
+                         recipeElement.style.opacity = '0.5';
+                         recipeElement.style.cursor = 'not-allowed';
+                         recipeElement.title = requirements.join(', '); // Show combined reasons why it can't be crafted
+                     }
+                 });
+             }
+
+
+            // --- Survival Mechanics ---
+
+            let lastSurvivalUpdateTime = 0; // Initialize at 0 to run first time
+            const survivalUpdateInterval = 5000; // Update every 5 seconds (5000 ms)
+            const hungerRate = 0.5; // Hunger points per interval
+            const thirstRate = 0.8; // Thirst points per interval
+            const starvationDamage = 1; // Health points per interval when starving
+            const dehydrationDamage = 1.5; // Health points per interval when dehydrated
+
+            function updateSurvivalStats(now) { // Pass current time
+                 if (gameState.isGameOver) return;
+
+                if (now - lastSurvivalUpdateTime >= survivalUpdateInterval) {
+                     let needsUIUpdate = false;
+
+                    // Decrease hunger and thirst
+                    const previousHunger = gameState.hunger;
+                    const previousThirst = gameState.thirst;
+                    gameState.hunger = Math.max(0, gameState.hunger - hungerRate);
+                    gameState.thirst = Math.max(0, gameState.thirst - thirstRate);
+
+                    if (gameState.hunger !== previousHunger || gameState.thirst !== previousThirst) {
+                         needsUIUpdate = true;
+                     }
+
+                    // Apply damage if starving or dehydrated
+                    let tookDamage = false;
+                    if (gameState.hunger <= 0) {
+                         const previousHealth = gameState.health;
+                        gameState.health = Math.max(0, gameState.health - starvationDamage);
+                         if(gameState.health < previousHealth) {
+                             showNotification('Starving!', 1000);
+                             tookDamage = true;
+                         }
+                    }
+                    if (gameState.thirst <= 0) {
+                         const previousHealth = gameState.health;
+                        gameState.health = Math.max(0, gameState.health - dehydrationDamage);
+                         if(gameState.health < previousHealth) {
+                             showNotification('Dehydrated!', 1000);
+                             tookDamage = true;
+                         }
+                    }
+
+                    // Update UI bars if stats changed
+                    if (needsUIUpdate) {
+                         document.getElementById('hunger-fill').style.width = gameState.hunger + '%';
+                         document.getElementById('thirst-fill').style.width = gameState.thirst + '%';
+                    }
+                    if (tookDamage) {
+                         document.getElementById('health-fill').style.width = gameState.health + '%';
+                    }
+
+                    lastSurvivalUpdateTime = now; // Reset timer for the next interval
+
+                    // Check for game over AFTER applying damage
+                    if (gameState.health <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+
+            function eatFood() {
+                 if (gameState.isGameOver || gameState.showInventory || gameState.placing) return;
+
+                // Try to eat 'cookedMeat' first
+                const foodItem = 'cookedMeat';
+                const hungerRestore = 30;
+                const healthRestore = 10; // Eating cooked food restores some health
+
+                if (gameState.inventory[foodItem] > 0) {
+                    if (removeInventoryItem(foodItem, 1)) {
+                        gameState.hunger = Math.min(100, gameState.hunger + hungerRestore);
+                        gameState.health = Math.min(100, gameState.health + healthRestore);
+                        document.getElementById('hunger-fill').style.width = gameState.hunger + '%';
+                        document.getElementById('health-fill').style.width = gameState.health + '%';
+                        showNotification(`Ate ${foodItem}. (+${hungerRestore} Hunger, +${healthRestore} Health)`, 2000);
+                    }
+                } else {
+                     // Optional: Allow eating raw meat with consequences?
+                     const rawFoodItem = 'meat';
+                     const rawHungerRestore = 10;
+                     const healthPenalty = 5; // Chance of penalty?
+                     if (gameState.inventory[rawFoodItem] > 0) {
+                         if(confirm("No cooked food. Eat raw meat? (Risky)")) { // Ask player
+                              if (removeInventoryItem(rawFoodItem, 1)) {
+                                  gameState.hunger = Math.min(100, gameState.hunger + rawHungerRestore);
+                                  document.getElementById('hunger-fill').style.width = gameState.hunger + '%';
+                                  // Apply health penalty maybe?
+                                  // gameState.health = Math.max(0, gameState.health - healthPenalty);
+                                  // document.getElementById('health-fill').style.width = gameState.health + '%';
+                                  showNotification(`Ate raw meat... (+${rawHungerRestore} Hunger)`, 2000);
+                              }
+                         }
+                     } else {
+                         showNotification('No food to eat.', 1500);
+                     }
+                }
+            }
+
+            function drinkWater() {
+                 if (gameState.isGameOver || gameState.showInventory || gameState.placing) return;
+
+                 if (gameState.inventory.canteen > 0) {
+                     if (gameState.waterPurified) {
+                         const thirstRestore = 40;
+                         gameState.thirst = Math.min(100, gameState.thirst + thirstRestore);
+                         document.getElementById('thirst-fill').style.width = gameState.thirst + '%';
+
+                         // Consume the purified water state
+                         gameState.waterPurified = false;
+                         showNotification(`Drank purified water. Canteen needs refilling or boiling. (+${thirstRestore} Thirst)`, 2500);
+                         updateCraftingMenuAvailability(); // Update crafting state
+                         updateQuickBarIfNeeded('canteen'); // Reflect state change maybe? (UI needs support)
+
+                     } else {
+                         showNotification('Water in canteen is not purified. Boil it at a campfire.', 2500);
+                         // Optional: Allow drinking unpurified water with consequences
+                         /*
+                         if(confirm("Water is not purified. Drink anyway? (Very Risky)")) {
+                             const thirstRestore = 20;
+                             const healthPenalty = 15; // Higher penalty
+                             gameState.thirst = Math.min(100, gameState.thirst + thirstRestore);
+                             gameState.health = Math.max(0, gameState.health - healthPenalty);
+                             document.getElementById('thirst-fill').style.width = gameState.thirst + '%';
+                             document.getElementById('health-fill').style.width = gameState.health + '%';
+                             showNotification(`Drank unpurified water... felt sick. (+${thirstRestore} Thirst, -${healthPenalty} Health)`, 2500);
+                             // Water state remains unpurified
+                         }
+                         */
+                     }
+                 } else {
+                     showNotification('Need a canteen to drink from.', 1500);
+                 }
+            }
+
+            // --- Raycasting for Interaction Prompt ---
+
+            const interactionRaycaster = new THREE.Raycaster();
+            const interactionCheckInterval = 200; // Check every 200ms
+            let lastInteractionCheckTime = 0;
+
+            function checkForInteractables(now) { // Pass current time
+                // Don't check if UI is open, game over, or placing structure
+                if (gameState.showInventory || gameState.isGameOver || gameState.placing) {
+                    if (gameState.interactable) { // If UI opened while looking at something, hide prompt
+                        hideInteractionPrompt();
+                        gameState.interactable = null;
+                    }
+                    return;
+                }
+
+                if (now - lastInteractionCheckTime < interactionCheckInterval) return; // Limit check frequency
+                lastInteractionCheckTime = now;
+
+                interactionRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = interactionRaycaster.intersectObjects(interactables, true); // Check registered interactables, including children
+
+                let foundInteractable = null;
+                let closestDistance = interactionDistance + 1; // Start beyond max distance
+
+                // Find the closest valid interactable within range
+                for (const intersect of intersects) {
+                    if (intersect.distance < interactionDistance) {
+                        // Find the top-level interactable object associated with the hit mesh
+                        let target = intersect.object;
+                        while (target.parent && target.parent !== scene && !target.isInteractable) {
+                            target = target.parent;
+                        }
+                        // Check if it's a valid, registered interactable
+                        if (interactables.includes(target)) {
+                            // Check if it's closer than the previously found one
+                            if (intersect.distance < closestDistance) {
+                                 foundInteractable = target;
+                                 closestDistance = intersect.distance;
+                            }
+                            // Don't break, continue checking in case a closer interactable is behind but hit first by ray
+                        }
+                    } else {
+                         break; // Intersections are sorted by distance, no need to check further
+                     }
+                }
+
+
+                // Update UI based on the closest found interactable
+                if (foundInteractable) {
+                    // If it's a new interactable OR the state changed (e.g., looted)
+                    if (gameState.interactable !== foundInteractable ||
+                        (foundInteractable.interactionType === 'search' && gameState.interactable?.looted !== foundInteractable.looted))
+                    {
+                        gameState.interactable = foundInteractable;
+                        let promptText = '[E] ';
+                        const currentTool = gameState.quickBar[gameState.selectedSlot]?.item;
+                        let toolRequirementMet = !foundInteractable.requiredTool || currentTool === foundInteractable.requiredTool;
+
+                        switch (foundInteractable.interactionType) {
+                             case 'search':
+                                 promptText += foundInteractable.looted ? 'Search (Empty)' : 'Search';
+                                 break;
+                             case 'chop': promptText += 'Chop Wood'; break;
+                             case 'mine': promptText += 'Mine Stone'; break;
+                             case 'harvest': promptText += 'Harvest Grass'; break;
+                             case 'hunt': promptText += 'Harvest Animal'; break;
+                             case 'collect': promptText += 'Collect ' + (foundInteractable.resourceType || 'Item'); break;
+                             case 'fill': promptText += 'Fill Canteen'; break;
+                             case 'use': promptText += `Use ${foundInteractable.structureType || 'Object'}`; break;
+                             default: promptText += 'Interact';
+                        }
+                         // Add tool requirement info if needed
+                         if (foundInteractable.requiredTool) {
+                             promptText += ` (Needs ${foundInteractable.requiredTool})`;
+                             if (!toolRequirementMet) {
+                                  promptText += ` - Missing!`;
+                             }
+                         }
+
+                        showInteractionPrompt(promptText);
+                    }
+                    // No 'else' needed: if looking at the same thing and state hasn't changed, prompt stays.
+                } else if (gameState.interactable) {
+                    // No interactable in range, hide prompt and clear state
+                    hideInteractionPrompt();
+                    gameState.interactable = null;
+                }
+            }
+
+            // --- Animal Movement ---
+
+            function updateAnimals(delta, now) { // Pass delta and current time
+                if (delta <= 0) return;
+
+                animals.forEach(animal => {
+                     const timeSinceUpdate = now - animal.lastMovementUpdate;
+
+                    // Basic wandering behavior: Choose new target periodically
+                    if (timeSinceUpdate > animal.movementTimeout) {
+                        const wanderRadius = 40;
+                         const currentPos = animal.position;
+                         animal.targetPosition.set(
+                             currentPos.x + (Math.random() - 0.5) * wanderRadius * 2,
+                             currentPos.y, // Keep y the same for ground level
+                             currentPos.z + (Math.random() - 0.5) * wanderRadius * 2
+                         );
+                         // Clamp target position to approximate world bounds
+                         animal.targetPosition.x = Math.max(-480, Math.min(480, animal.targetPosition.x));
+                         animal.targetPosition.z = Math.max(-480, Math.min(480, animal.targetPosition.z));
+
+                        animal.lastMovementUpdate = now;
+                        animal.movementTimeout = Math.random() * 8000 + 5000; // Next change in 5-13 seconds
+                    }
+
+                    // Move towards target position
+                    const direction = new THREE.Vector3().subVectors(animal.targetPosition, animal.position);
+                    direction.y = 0; // Move only on XZ plane
+                    const distanceToTarget = direction.length();
+
+                    if (distanceToTarget > 1.0) { // Stop if close enough
+                         direction.normalize();
+                         // Simple move - no collision checks for animals
+                         // Scale speed by delta and a fixed factor for desired speed
+                         const moveAmount = direction.multiplyScalar(animal.movementSpeed * delta * 60);
+                         animal.position.add(moveAmount);
+
+                         // Rotate to face movement direction smoothly (optional)
+                         // animal.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), direction), 0.1);
+                         // Simpler lookAt:
+                         const lookAtPos = new THREE.Vector3().addVectors(animal.position, direction);
+                          animal.lookAt(lookAtPos.x, animal.position.y + 0.5, lookAtPos.z); // Look slightly higher than own feet
+
+                    } else {
+                         // Reached target (or close enough), maybe trigger idle animation?
+                    }
+                });
+            }
+
+             // --- Structure Placement ---
+
+             const placementRaycaster = new THREE.Raycaster();
+             const placementDistance = 5.0; // How far in front to place
+
+             function placeStructure(structureType) {
+                 if (gameState.placing || gameState.showInventory || gameState.isGameOver) return;
+
+                 // Check if player has the item in inventory
+                 if (gameState.inventory[structureType] < 1) {
+                     showNotification(`You don't have a ${structureType} to place. Craft one first.`, 2000);
+                     return;
+                 }
+
+                 gameState.placing = structureType;
+                 showNotification(`Placing ${structureType}. Left-click to place, Right-click to cancel.`, 5000);
+
+                 // Create preview mesh
+                 const previewMaterial = new THREE.MeshBasicMaterial({
+                     color: 0x00ff00, // Green for valid placement initially
+                     transparent: true,
+                     opacity: 0.5,
+                     wireframe: true // Wireframe helps visibility
+                 });
+
+                 // Create geometry based on structure type
+                 let previewGeometry;
+                 // Use recipe definitions if possible, or hardcode geometry
+                 if (structureType === 'campfire') {
+                     // Match visual size of placed campfire (base radius/height)
+                     previewGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 12);
+                 } else if (structureType === 'craftingtable') {
+                      previewGeometry = new THREE.BoxGeometry(1.5, 1.0, 0.8);
+                 } else if (structureType === 'forge') {
+                     previewGeometry = new THREE.BoxGeometry(1.2, 1.5, 1.2);
+                 }
+                 // Add more structures here...
+                 else {
+                      console.error("Cannot create placement preview for unknown structure type:", structureType);
+                      gameState.placing = null; // Cancel placement mode
+                      showNotification("Error: Unknown structure type for placement.", 2000);
+                      return;
+                  }
+
+                 gameState.placementPreview = new THREE.Mesh(previewGeometry, previewMaterial);
+                 gameState.placementPreview.name = "Placement Preview";
+                 // Don't add to collidables list
+                 scene.add(gameState.placementPreview);
+
+                 // Add temporary listener for right-click cancel
+                 placementClickListener = (event) => {
+                    if (event.button === 2) { // Right mouse button
+                        cancelPlacement();
+                        event.preventDefault(); // Prevent context menu only during placement cancel
+                    }
+                 };
+                 document.addEventListener('mousedown', placementClickListener);
+                 // Prevent context menu while placing
+                 document.addEventListener('contextmenu', preventContextMenu);
+
+                  // Release pointer lock during placement to allow seeing the cursor potentially
+                  // unlockPointer(); // Or keep it locked? User preference. Let's keep locked.
+             }
+
+             function preventContextMenu(event){
+                  if(gameState.placing){
+                      event.preventDefault();
+                  }
+             }
+
+            function updatePlacementPreview() {
+                if (!gameState.placing || !gameState.placementPreview) return;
+
+                // Raycast from camera center
+                placementRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+                 // Include ground and building floors and *already placed* structures as placement targets
+                 const placementTargets = objects.filter(o => o.name === 'ground' || o.name === 'building_floor' || o.placed === true);
+
+                const intersects = placementRaycaster.intersectObjects(placementTargets, true);
+
+                let validPlacement = false;
+                 let targetPoint = null;
+
+                if (intersects.length > 0) {
+                    const intersection = intersects[0];
+                    targetPoint = intersection.point;
+
+                    // Check if the intersection point is within placement distance from the PLAYER's feet
+                     const playerFeetPos = player.position.clone().setY(player.position.y - player.height + 0.1);
+                     if (targetPoint.distanceTo(playerFeetPos) < placementDistance) {
+                         // Snap position slightly above the intersection point along the face normal
+                         const offset = 0.01; // Small offset to prevent z-fighting
+                         gameState.placementPreview.position.copy(targetPoint).addScaledVector(intersection.face.normal, offset);
+
+                         // Optional: Align Y rotation with player view? Or snap to grid? Keep simple for now.
+                         // gameState.placementPreview.rotation.y = controls.yawAngle;
+
+                         // --- Collision Check for Preview ---
+                         // Check if the preview mesh's bounding box intersects other collidable objects (excluding ground/target surface)
+                         validPlacement = true; // Assume valid initially
+                         gameState.placementPreview.updateMatrixWorld(); // Ensure matrix is up-to-date
+                         const previewBounds = new THREE.Box3().setFromObject(gameState.placementPreview);
+
+                         for (const obj of objects) {
+                              // Don't check collision with the ground/floor we are placing on, itself, or non-collidables
+                             if (obj !== intersection.object && obj.isCollidable && obj !== gameState.placementPreview) {
+                                  obj.updateMatrixWorld(); // Ensure object matrix is updated
+                                 const objBounds = new THREE.Box3().setFromObject(obj);
+                                 if (previewBounds.intersectsBox(objBounds)) {
+                                     validPlacement = false;
+                                     break; // Found collision, placement is invalid
+                                 }
+                             }
+                         }
+                     } else {
+                          // Target point too far away
+                          targetPoint = null; // Clear target point if too far
+                      }
+                }
+
+                // Update preview visibility and color
+                gameState.placementPreview.visible = (targetPoint !== null && validPlacement);
+                 if (gameState.placementPreview.visible) {
+                      gameState.placementPreview.material.color.set(0x00ff00); // Green
+                 } else {
+                     // If not visible, still try to position it for feedback, but make it red if it *would* be visible but is invalid
+                     if (targetPoint !== null && !validPlacement) {
+                          // Position it, but make it red and potentially slightly more transparent?
+                          gameState.placementPreview.position.copy(targetPoint).addScaledVector(intersects[0].face.normal, 0.01);
+                          gameState.placementPreview.material.color.set(0xff0000); // Red
+                          gameState.placementPreview.visible = true; // Make red preview visible
+                      } else {
+                          // Completely invalid position (too far, etc.) - hide it
+                           gameState.placementPreview.visible = false;
+                           gameState.placementPreview.material.color.set(0xff0000); // Keep color red even when hidden
+                      }
+                 }
+            }
+
+            function handlePlacementConfirm() {
+                 // Can only place if preview is visible and green (valid)
+                 if (!gameState.placing || !gameState.placementPreview || !gameState.placementPreview.visible || gameState.placementPreview.material.color.getHex() === 0xff0000) {
+                      showNotification("Cannot place structure here.", 1500);
+                      return;
+                  }
+
+                // Consume the item from inventory
+                if (!removeInventoryItem(gameState.placing, 1)) {
+                     console.error("Placement failed: Could not remove item from inventory.");
+                     showNotification("Error: Could not find placement item in inventory.", 2000);
+                     cancelPlacement(); // Cancel if item removal fails
+                     return;
+                 }
+
+                // Create the actual structure object at the preview's location/rotation
+                createPlacedStructure(gameState.placing, gameState.placementPreview.position, gameState.placementPreview.rotation);
+
+                 // Show confirmation *before* cleaning up state
+                 showNotification(`Placed ${gameState.placing}.`, 1500);
+
+                // Clean up placement mode
+                finishPlacement();
+            }
+
+            function cancelPlacement() {
+                 if (!gameState.placing) return; // Avoid cancelling if not placing
+                 showNotification("Placement cancelled.", 1000);
+                 finishPlacement();
+             }
+
+             function finishPlacement() {
+                 if (!gameState.placing) return; // Already finished or wasn't placing
+
+                 // Remove preview mesh
+                 if (gameState.placementPreview) {
+                     scene.remove(gameState.placementPreview);
+                     if (gameState.placementPreview.geometry) gameState.placementPreview.geometry.dispose();
+                     if (gameState.placementPreview.material) gameState.placementPreview.material.dispose();
+                     gameState.placementPreview = null;
+                 }
+                 // Remove temporary listeners
+                 if (placementClickListener) {
+                     document.removeEventListener('mousedown', placementClickListener);
+                     placementClickListener = null;
+                 }
+                 document.removeEventListener('contextmenu', preventContextMenu);
+
+                 const structureType = gameState.placing; // Store type before nulling
+                 gameState.placing = null; // Exit placement mode
+
+                 // Re-lock pointer if needed (and not in inventory/game over)
+                 if (!gameState.showInventory && !gameState.isGameOver) {
+                     lockPointer();
+                 }
+                 console.log(`Finished placement mode for ${structureType}.`);
+             }
+
+
+            function createPlacedStructure(type, position, rotation) {
+                let structureMesh;
+                // Base material - can be overridden
+                let structureMaterial = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.1 });
+
+                if (type === 'campfire') {
+                     // Model matching preview size, visually more detailed
+                     const group = new THREE.Group();
+                     group.name = "Campfire (Placed)";
+                     const stoneRadius = 0.7;
+                     const stoneHeight = 0.3;
+                     const woodHeight = 0.5;
+                     const woodRadius = 0.1;
+
+                     // Base stones ring
+                     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.9 });
+                     const baseGeo = new THREE.CylinderGeometry(stoneRadius, stoneRadius, stoneHeight, 12);
+                     const base = new THREE.Mesh(baseGeo, stoneMat);
+                     base.position.y = stoneHeight / 2; // Bottom at y=0
+                     base.castShadow = true;
+                     base.receiveShadow = true;
+                     base.isCollidable = true; // Campfire base is collidable
+                     group.add(base);
+                     objects.push(base); // Add base part to collision
+
+                     // Logs inside
+                     const woodMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
+                     const logGeo = new THREE.CylinderGeometry(woodRadius, woodRadius, woodHeight, 6);
+                     for (let i = 0; i < 5; i++) {
+                         const log = new THREE.Mesh(logGeo, woodMat);
+                         const angle = (i / 5) * Math.PI * 2;
+                         const offsetRadius = stoneRadius * 0.4;
+                         log.position.set(
+                             Math.cos(angle) * offsetRadius,
+                             stoneHeight + woodHeight / 2 - 0.1, // Rest logs slightly above base top
+                             Math.sin(angle) * offsetRadius
+                         );
+                         log.rotation.set(Math.random()*0.2 - 0.1, Math.random()*0.2, Math.random()*Math.PI);
+                         log.castShadow = true;
+                         // Logs likely not collidable individually
+                         group.add(log);
+                     }
+                     structureMesh = group; // Use the group as the main object for interaction/scene graph
+                     // Add light source for campfire? - Future enhancement
+                     // const fireLight = new THREE.PointLight(0xffa500, 1, 10, 2); // Orange light
+                     // fireLight.position.set(0, stoneHeight + 0.3, 0); // Position light above logs
+                     // group.add(fireLight); // Add light to the group
+                } else if (type === 'craftingtable') {
+                      structureMaterial.color.set(0x966F33); // Wood color
+                      const tableGeo = new THREE.BoxGeometry(1.5, 1.0, 0.8);
+                      structureMesh = new THREE.Mesh(tableGeo, structureMaterial);
+                      structureMesh.name = "Crafting Table (Placed)";
+                 } else if (type === 'forge') {
+                     structureMaterial.color.set(0x555555); // Dark stone color
+                     const forgeGeo = new THREE.BoxGeometry(1.2, 1.5, 1.2);
+                     structureMesh = new THREE.Mesh(forgeGeo, structureMaterial);
+                     structureMesh.name = "Forge (Placed)";
+                 }
+                 // Add more structures here...
+                 else {
+                      console.error("Cannot create placed structure for unknown type:", type);
+                      // Give item back?
+                      addInventoryItem(type, 1);
+                      showNotification(`Error placing ${type}. Item returned.`, 2500);
+                      return;
+                 }
+
+                 // Common properties for placed structures
+                structureMesh.position.copy(position);
+                structureMesh.rotation.copy(rotation);
+                structureMesh.castShadow = true;
+                structureMesh.receiveShadow = true;
+
+                 // Set collidable status based on type (groups handled above)
+                 if (!structureMesh.isGroup) {
+                      structureMesh.isCollidable = true;
+                      objects.push(structureMesh); // Add mesh to collidables if not a group
+                 }
+
+                structureMesh.isInteractable = true;
+                structureMesh.structureType = type; // Store the type
+                structureMesh.interactionType = 'use'; // General interaction type
+                structureMesh.placed = true; // Mark as placed by player
+
+                scene.add(structureMesh);
+                interactables.push(structureMesh); // Add to interactable objects (usually the group)
+
+                console.log(`Created placed ${type} at`, position.toArray().map(n=>n.toFixed(2)));
+            }
+
+            function useCampfire() {
+                 // Find nearby campfire using interaction check logic or direct check
+                 const campfire = isNearRequiredStructure('campfire'); // isNear checks proximity
+                 if (campfire) {
+                     // Campfire doesn't have a dedicated UI here.
+                     // Cooking/Purifying is done via the Crafting menu, which already checks for nearby campfire.
+                     showNotification('Campfire is lit. Use Crafting menu to cook or purify water.', 3000);
+                 } else {
+                     // This function might be called via keypress 'C' even if not looking at it.
+                     showNotification('No campfire nearby to use.', 1500);
+                 }
+            }
+
+
+            // --- Game Over ---
+
+            function gameOver() {
+                 if (gameState.isGameOver) return; // Prevent multiple calls
+                 gameState.isGameOver = true;
+                 console.log("Game Over!");
+
+                 // Stop animation loop
+                 if (animationFrameId) {
+                     cancelAnimationFrame(animationFrameId);
+                     animationFrameId = null;
+                 }
+
+                 // Display game over message overlay
+                 const gameOverDiv = document.createElement('div');
+                 gameOverDiv.id = 'game-over-screen'; // Use ID for styling and removal
+                 gameOverDiv.innerHTML = `
+                     <h1>Game Over</h1>
+                     <p>You succumbed to the elements.</p>
+                     <button id="return-to-menu-btn" class="menu-option" style="margin-top: 20px;">Return to Menu</button>
+                 `;
+                 document.body.appendChild(gameOverDiv);
+
+                 // Add listener for the return button *on the game over screen*
+                 document.getElementById('return-to-menu-btn').addEventListener('click', () => {
+                     console.log("Returning to menu...");
+                     // Clean up game over screen
+                     if (gameOverDiv.parentNode) {
+                         gameOverDiv.parentNode.removeChild(gameOverDiv);
+                     }
+                     // Clean up game state, listeners, and Three.js
+                     cleanupGameListeners(); // Remove game-specific listeners
+                     cleanupThreeJS(); // Clean scene, renderer etc.
+                     resetGameState(); // Reset game variables
+
+                     // Show the start menu again, hide game UI
+                     gameUI.style.display = 'none';
+                     startMenu.style.display = 'flex';
+                     document.getElementById('main-menu').style.display = 'block'; // Show main options
+                     document.getElementById('settings-menu').style.display = 'none'; // Hide settings
+
+                     console.log("Returned to menu.");
+                 }, { once: true }); // Listener should only fire once
+
+                 // Unlock pointer
+                 unlockPointer();
+
+                 // Hide interaction prompt if it was visible
+                 hideInteractionPrompt();
+            }
+
+
+            // --- Animation Loop ---
+
+            function animate() {
+                // Store the frame ID so we can cancel it
+                 animationFrameId = requestAnimationFrame(animate);
+
+                 // Get delta time for physics updates
+                 const delta = clock.getDelta();
+                 // Get current time for timed updates
+                 const now = performance.now(); // Use performance.now for higher precision time
+
+                 // --- Updates requiring pointer lock (or specific states) ---
+                 if (document.pointerLockElement === document.body || gameState.showInventory) {
+                     controls.update(); // Update camera rotation based on mouse input delta
+                 }
+
+                 // --- Updates only when active (not in inventory, not placing, not game over) ---
+                 if (document.pointerLockElement === document.body && !gameState.showInventory && !gameState.placing && !gameState.isGameOver) {
+                     player.update(delta); // Update player physics, movement, collision
+                 }
+
+                 // --- Updates that run regardless of pointer lock (unless game over) ---
+                 if (!gameState.isGameOver) {
+                     // Update animal movement (needs delta and current time)
+                     updateAnimals(delta, now);
+
+                     // Check for interaction prompts (needs current time)
+                     checkForInteractables(now);
+
+                     // Update placement preview position if active
+                     if (gameState.placing) {
+                          updatePlacementPreview();
+                     }
+
+                     // Update survival stats periodically (needs current time)
+                     updateSurvivalStats(now);
+                 }
+
+                 // --- Render the scene ---
+                 // Check if renderer exists before rendering (safety measure)
+                 if (renderer && scene && camera) {
+                     renderer.render(scene, camera);
+                 } else if (!gameState.isGameOver) {
+                      console.error("Render components missing in animate loop!");
+                      // Consider stopping the loop or showing an error if critical components disappear unexpectedly
+                      // gameOver(); // Maybe trigger game over if rendering breaks?
+                 }
+            }
+
+            // --- Start the UI/Settings Initialization ---
+            initUIAndSettings(); // Setup UI elements and settings listeners
+
+        } // End of initializeGame function
+
+
+        // --- Global Initialization Logic ---
+
+        // Run compatibility checks first when the script loads
+        const compatible = runCompatibilityChecks();
+
+        if (compatible) {
+            // Hide loading, show start menu
+            loadingScreen.style.display = 'none';
+            startMenu.style.display = 'flex';
+            // Call the main game setup function which defines everything needed
+            initializeGame();
+        } else {
+            // Error screen is already shown by runCompatibilityChecks
+            console.log("Game initialization halted due to compatibility issues.");
+        }
+
+    </script>
+</body>
+</html>

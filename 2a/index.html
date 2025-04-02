@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="loading-screen">
+        <div class="loading-container">
+            <h1>3D Survival Game</h1>
+            <div class="progress-bar">
+                <div class="progress"></div>
+            </div>
+            <div id="loading-message">Loading game assets...</div>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div id="hud">
+            <div id="health-bar">
+                <div class="bar-label">Health</div>
+                <div class="bar-container">
+                    <div class="bar-fill" id="health-fill"></div>
+                </div>
+            </div>
+            <div id="hunger-bar">
+                <div class="bar-label">Hunger</div>
+                <div class="bar-container">
+                    <div class="bar-fill" id="hunger-fill"></div>
+                </div>
+            </div>
+            <div id="thirst-bar">
+                <div class="bar-label">Thirst</div>
+                <div class="bar-container">
+                    <div class="bar-fill" id="thirst-fill"></div>
+                </div>
+            </div>
+            <div id="quick-bar"></div>
+            <div id="action-text"></div>
+        </div>
+    </div>
+
+    <div id="inventory-screen" class="hidden">
+        <div class="inventory-container">
+            <h2>Inventory</h2>
+            <div class="inventory-grid" id="player-inventory"></div>
+            <div class="quick-bar-grid" id="quick-bar-inventory"></div>
+            <div id="crafting-menu" class="hidden">
+                <h3>Crafting</h3>
+                <div class="crafting-grid" id="crafting-recipes"></div>
+            </div>
+            <div class="button-row">
+                <button id="crafting-button">Crafting</button>
+                <button id="close-inventory">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="start-menu">
+        <div class="menu-container">
+            <h1>3D Survival Game</h1>
+            <div class="settings">
+                <h3>Game Settings</h3>
+                <div class="setting">
+                    <label for="resource-amount">Starting Resources:</label>
+                    <select id="resource-amount">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div class="setting">
+                    <label for="player-speed">Player Speed:</label>
+                    <input type="range" id="player-speed" min="1" max="10" value="5">
+                </div>
+                <div class="setting">
+                    <label for="player-height">Player Height:</label>
+                    <input type="range" id="player-height" min="1" max="3" value="1.8" step="0.1">
+                </div>
+            </div>
+            <button id="start-game">Start Game</button>
+        </div>
+    </div>
+
+    <div id="error-screen" class="hidden">
+        <div class="error-container">
+            <h2>Error</h2>
+            <p id="error-message"></p>
+            <button id="retry-button">Retry</button>
+        </div>
+    </div>
+
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Check if Three.js loaded correctly -->
+    <script>
+        if (typeof THREE === 'undefined') {
+            document.getElementById('error-screen').classList.remove('hidden');
+            document.getElementById('error-message').textContent = 'Failed to load Three.js library. Please check your internet connection and refresh the page.';
+        }
+    </script>
+
+    <!-- Additional Three.js modules -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/controls/PointerLockControls.min.js"></script>
+    
+    <!-- Game Scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/assetLoader.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/items.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/animals.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

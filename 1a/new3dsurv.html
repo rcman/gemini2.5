@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Survival Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #333; color: white; }
+        canvas { display: block; }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: flex; /* Changed to flex */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column; /* Stack elements vertically */
+            cursor: pointer;
+            color: white;
+            font-size: 24px;
+            text-align: center; /* Center text within instructions */
+        }
+        #instructions {
+            width: 80%;
+            max-width: 500px; /* Limit width */
+            background-color: rgba(50, 50, 50, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        #settings {
+             margin-bottom: 20px;
+             text-align: left; /* Align settings labels */
+             font-size: 16px;
+        }
+         #settings label, #settings input, #settings select {
+             display: block;
+             margin-bottom: 10px;
+             width: 90%; /* Make inputs take more width */
+             margin-left: auto; /* Center within settings box */
+             margin-right: auto;
+         }
+         #settings button {
+             padding: 10px 20px;
+             font-size: 18px;
+             cursor: pointer;
+             margin-top: 15px;
+         }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background-color: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* Allow clicks to go through */
+            display: none; /* Hidden until game starts */
+        }
+        #ui-container {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: center;
+            pointer-events: none; /* Allow clicks on canvas */
+        }
+        .quick-slot {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #aaa;
+            background-color: rgba(0,0,0,0.5);
+            margin: 0 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            color: white;
+            position: relative; /* For count */
+        }
+        .quick-slot.selected {
+            border-color: yellow;
+        }
+        .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            background-color: rgba(0,0,0,0.7);
+            padding: 0 3px;
+            border-radius: 3px;
+        }
+        #inventory {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 400px;
+            height: 300px;
+            background-color: rgba(50, 50, 50, 0.9);
+            border: 2px solid #ccc;
+            display: none; /* Hidden by default */
+            grid-template-columns: repeat(8, 50px); /* 8 columns */
+            grid-template-rows: repeat(5, 50px); /* 5 rows */
+            gap: 5px;
+            padding: 10px;
+            justify-content: center;
+            align-content: start;
+            pointer-events: auto; /* Allow interaction */
+            z-index: 10; /* Above other UI */
+        }
+         .inventory-slot {
+             width: 45px;
+             height: 45px;
+             border: 1px solid #888;
+             background-color: rgba(0,0,0,0.4);
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             font-size: 10px;
+             color: white;
+             cursor: pointer;
+             position: relative; /* For count */
+         }
+         .inventory-slot:hover {
+             background-color: rgba(255, 255, 255, 0.2);
+         }
+         #message {
+             position: absolute;
+             top: 20px;
+             left: 50%;
+             transform: translateX(-50%);
+             background-color: rgba(0,0,0,0.7);
+             color: yellow;
+             padding: 10px;
+             border-radius: 5px;
+             display: none; /* Hidden initially */
+             z-index: 5;
+         }
+         /* Simple representation of items */
+         .item-wood::before { content: 'W'; font-size: 20px; color: saddlebrown; }
+         .item-stone::before { content: 'S'; font-size: 20px; color: gray; }
+         .item-fiber::before { content: '~'; font-size: 20px; color: greenyellow; }
+         .item-scrap::before { content: 'M'; font-size: 20px; color: silver; }
+         .item-meat_raw::before { content: '🥩'; font-size: 20px; }
+         .item-meat_cooked::before { content: '🍖'; font-size: 20px; }
+         .item-axe::before { content: '🪓'; font-size: 20px; }
+         .item-pickaxe::before { content: '⛏️'; font-size: 20px; }
+         .item-knife::before { content: '🔪'; font-size: 20px; }
+         .item-canteen::before { content: '💧'; font-size: 20px; }
+         .item-rope::before { content: 'Rope'; font-size: 12px; color: burlywood;}
+         .item-campfire::before { content: '🔥'; font-size: 20px; }
+         /* Add more items as needed */
+
+    </style>
+</head>
+<body>
+    <div id="blocker">
+        <div id="instructions">
+            <div id="settings">
+                <h2>Game Settings</h2>
+                <label for="start-resources">Starting Resources:</label>
+                <select id="start-resources">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                </select>
+                <label for="player-speed">Player Speed:</label>
+                <input type="range" id="player-speed" min="50" max="200" value="100">
+                <label for="player-height">Player Height:</label>
+                <input type="range" id="player-height" min="1.5" max="2.5" step="0.1" value="1.8">
+                <button id="start-button">Start Game</button>
+            </div>
+             <p style="font-size: 20px;">Click to Play</p>
+            <p>WASD: Move | SPACE: Jump | MOUSE: Look</p>
+            <p>E: Interact/Gather | TAB: Inventory | 1-5: Select Quick Slot</p>
+             <p>SHIFT + Click: Move item between Inventory & Quick Bar</p>
+             <p>ESC: Pause / Release Mouse</p>
+        </div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="ui-container">
+        <div class="quick-slot" id="quick-slot-1"></div>
+        <div class="quick-slot" id="quick-slot-2"></div>
+        <div class="quick-slot" id="quick-slot-3"></div>
+        <div class="quick-slot" id="quick-slot-4"></div>
+        <div class="quick-slot" id="quick-slot-5"></div>
+        <!-- Add more slots if needed -->
+    </div>
+    <div id="inventory">
+        <!-- Inventory slots will be generated by JS -->
+    </div>
+    <div id="message"></div>
+
+    <!-- THREE.JS SCRIPT -->
+    <!-- Using cdnjs over HTTP as requested -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- PointerLockControls - Ensure version compatibility with three.min.js -->
+    <!-- NOTE: Finding the correct PointerLockControls module version for r128 via HTTP CDN can be tricky. -->
+    <!-- This might require downloading it manually or finding a specific CDN link if available. -->
+    <!-- Using a slightly different structure assuming it's available globally for simplicity here -->
+    <script>
+        // Temporary placeholder for PointerLockControls if direct import fails
+        // Ideally, load this from a compatible CDN source via HTTP
+        var PointerLockControls = function ( camera, domElement ) {
+
+            if ( domElement === undefined ) {
+                console.warn( 'THREE.PointerLockControls: The second parameter `domElement` is now mandatory.' );
+                domElement = document.body;
+            }
+
+            this.domElement = domElement;
+            this.isLocked = false;
+
+            // Set to constrain the pitch of the camera
+            // Range is 0 to Math.PI radians
+            this.minPolarAngle = 0; // radians
+            this.maxPolarAngle = Math.PI; // radians
+
+            var scope = this;
+
+            var changeEvent = { type: 'change' };
+            var lockEvent = { type: 'lock' };
+            var unlockEvent = { type: 'unlock' };
+
+            var euler = new THREE.Euler( 0, 0, 0, 'YXZ' );
+
+            var PI_2 = Math.PI / 2;
+
+            var vec = new THREE.Vector3();
+
+            function onMouseMove( event ) {
+
+                if ( scope.isLocked === false ) return;
+
+                var movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                var movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+                euler.setFromQuaternion( camera.quaternion );
+
+                euler.y -= movementX * 0.002;
+                euler.x -= movementY * 0.002;
+
+                euler.x = Math.max( PI_2 - scope.maxPolarAngle, Math.min( PI_2 - scope.minPolarAngle, euler.x ) );
+
+                camera.quaternion.setFromEuler( euler );
+
+                scope.dispatchEvent( changeEvent );
+
+            }
+
+            function onPointerlockChange() {
+
+                if ( document.pointerLockElement === scope.domElement ) {
+
+                    scope.dispatchEvent( lockEvent );
+
+                    scope.isLocked = true;
+
+                } else {
+
+                    scope.dispatchEvent( unlockEvent );
+
+                    scope.isLocked = false;
+
+                }
+
+            }
+
+            function onPointerlockError() {
+                console.error( 'THREE.PointerLockControls: Unable to use Pointer Lock API' );
+            }
+
+            this.connect = function () {
+                document.addEventListener( 'mousemove', onMouseMove, false );
+                document.addEventListener( 'pointerlockchange', onPointerlockChange, false );
+                document.addEventListener( 'pointerlockerror', onPointerlockError, false );
+            };
+
+            this.disconnect = function () {
+                document.removeEventListener( 'mousemove', onMouseMove, false );
+                document.removeEventListener( 'pointerlockchange', onPointerlockChange, false );
+                document.removeEventListener( 'pointerlockerror', onPointerlockError, false );
+            };
+
+            this.dispose = function () {
+                this.disconnect();
+            };
+
+            this.getObject = function () { // retaining this method for backward compatibility
+                return camera;
+            };
+
+            this.getDirection = function () {
+                var direction = new THREE.Vector3( 0, 0, - 1 );
+                return function ( v ) {
+                    return v.copy( direction ).applyQuaternion( camera.quaternion );
+                };
+            }();
+
+            this.moveForward = function ( distance ) {
+                // move forward parallel to the xz-plane
+                // assumes camera.up is y-up
+                vec.setFromMatrixColumn( camera.matrix, 0 );
+                vec.crossVectors( camera.up, vec );
+                camera.position.addScaledVector( vec, distance );
+            };
+
+            this.moveRight = function ( distance ) {
+                vec.setFromMatrixColumn( camera.matrix, 0 );
+                camera.position.addScaledVector( vec, distance );
+            };
+
+            this.lock = function () {
+                this.domElement.requestPointerLock();
+            };
+
+            this.unlock = function () {
+                document.exitPointerLock();
+            };
+
+            this.connect();
+
+        };
+
+        PointerLockControls.prototype = Object.create( THREE.EventDispatcher.prototype );
+        PointerLockControls.prototype.constructor = PointerLockControls;
+
+    </script>
+
+    <script type="module"> // Use module for better organization (though imports might be tricky without proper CDN modules)
+
+        // --- THREE.JS Check ---
+        if (typeof THREE === 'undefined') {
+            alert('FATAL ERROR: THREE.js failed to load. Please check your internet connection or the script path.');
+            document.getElementById('blocker').innerHTML = 'ERROR: THREE.js did not load!';
+            // Stop execution if Three.js is not loaded
+            throw new Error("THREE.js failed to load.");
+        } else {
+            console.log("THREE.js loaded successfully. Version:", THREE.REVISION);
+        }
+
+        // --- Core Components ---
+        let scene, camera, renderer, controls, clock;
+        let playerVelocity = new THREE.Vector3();
+        let playerOnFloor = false;
+        let playerHeight = 1.8; // Default, will be set by settings
+        let playerSpeedFactor = 100.0; // Default, will be set by settings
+
+        // --- Game State ---
+        const gameObjects = []; // For collision detection and interaction
+        const collidableObjects = []; // Objects player cannot pass through
+        const interactableObjects = []; // Objects player can interact with
+        let inventory = []; // Array of { name: string, count: number }
+        let quickBar = [null, null, null, null, null]; // Represents items in slots 1-5
+        let selectedQuickSlot = 0; // Index 0-4
+        const INVENTORY_SIZE = 40; // 8 columns * 5 rows
+        let inventoryOpen = false;
+        let gamePaused = true; // Start paused with settings/instructions
+
+        // --- DOM Elements ---
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+        const settingsContainer = document.getElementById('settings');
+        const startButton = document.getElementById('start-button');
+        const crosshair = document.getElementById('crosshair');
+        const inventoryDisplay = document.getElementById('inventory');
+        const messageDisplay = document.getElementById('message');
+        const quickSlotElements = [];
+        for (let i = 1; i <= 5; i++) {
+            quickSlotElements.push(document.getElementById(`quick-slot-${i}`));
+        }
+
+        // --- Constants ---
+        const GRAVITY = 30.0;
+        const INTERACTION_DISTANCE = 5.0;
+        const JUMP_VELOCITY = 10.0;
+
+        // --- Crafting Recipes ---
+        const recipes = {
+            'rope': { fiber: 3 },
+            'axe': { wood: 5, stone: 3, rope: 1 },
+            'pickaxe': { wood: 5, stone: 3, rope: 1 },
+            'campfire': { wood: 10, stone: 5 },
+            // Add crafting table, forge recipes later
+        };
+
+        // --- Initialization ---
+                // --- Initialization ---
+        function init() {
+            clock = new THREE.Clock();
+
+            // Scene
+            // ... (scene, camera, renderer setup) ...
+
+            // Lighting
+            // ... (light setup) ...
+
+            // Pointer Lock Controls
+            // ... (controls setup) ...
+
+            // World Generation
+            createWorld();
+
+            // --- FIX STARTS HERE ---
+            // UI Setup (Create visual slots BEFORE adding items that update UI)
+            createInventorySlots();
+            // --- FIX ENDS HERE ---
+
+            // Initial Player Items & Settings
+            applyStartingSettings(); // Now safe to call addInventoryItem -> updateInventoryUI
+            addInventoryItem('axe', 1);
+            addInventoryItem('pickaxe', 1);
+            addInventoryItem('knife', 1);
+            addInventoryItem('canteen', 1);
+            // Move starting items to quickbar
+            moveItemToQuickBar(0, 0); // Axe to slot 1
+            moveItemToQuickBar(1, 1); // Pickaxe to slot 2
+            moveItemToQuickBar(2, 2); // Knife to slot 3
+            moveItemToQuickBar(3, 3); // Canteen to slot 4
+
+
+            // Event Listeners
+            setupEventListeners();
+
+            // Final UI Updates
+            updateQuickBarUI();
+            updateInventoryUI(); // Update inventory display with all initial items
+            selectQuickSlot(0); // Select first slot by default
+
+            // Start Animation Loop (will be called once game starts)
+            // animate() will be called once game starts via pointer lock 'lock' event
+        }
+        function applyStartingSettings() {
+            const resourceLevel = document.getElementById('start-resources').value;
+            const speedSetting = document.getElementById('player-speed').value;
+            const heightSetting = parseFloat(document.getElementById('player-height').value);
+
+            playerHeight = heightSetting;
+            camera.position.y = playerHeight; // Adjust camera immediately
+            // Adjust speed factor (controls sensitivity might need tweaking)
+            playerSpeedFactor = 80.0 + (parseFloat(speedSetting)); // Base speed + adjustment
+
+            let wood = 0, stone = 0, fiber = 0;
+            if (resourceLevel === 'low') {
+                wood = 5; stone = 5; fiber = 10;
+            } else if (resourceLevel === 'medium') {
+                wood = 20; stone = 20; fiber = 30;
+            } else if (resourceLevel === 'high') {
+                wood = 50; stone = 50; fiber = 60;
+            }
+            addInventoryItem('wood', wood);
+            addInventoryItem('stone', stone);
+            addInventoryItem('fiber', fiber);
+
+             console.log(`Settings Applied: Resources=${resourceLevel}, SpeedFactor=${playerSpeedFactor.toFixed(1)}, Height=${playerHeight}`);
+        }
+
+        function createWorld() {
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(500, 500);
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55, side: THREE.DoubleSide }); // Green grass
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Water (simple plane below ground)
+            const waterGeometry = new THREE.PlaneGeometry(500, 500);
+            const waterMaterial = new THREE.MeshStandardMaterial({ color: 0x3366cc, transparent: true, opacity: 0.7 });
+            const water = new THREE.Mesh(waterGeometry, waterMaterial);
+            water.rotation.x = -Math.PI / 2;
+            water.position.y = -0.5; // Slightly below ground
+            scene.add(water);
+
+            // Add some objects (Trees, Rocks, Buildings, etc.)
+            const treeGeometry = new THREE.CylinderGeometry(0.3, 0.5, 5, 8);
+            const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown trunk
+            const leavesGeometry = new THREE.SphereGeometry(2, 8, 6);
+            const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 }); // Green leaves
+
+            const rockGeometry = new THREE.IcosahedronGeometry(0.8, 0); // Simple rock shape
+            const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
+
+            const buildingGeometry = new THREE.BoxGeometry(8, 6, 10);
+            const buildingMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+
+            const barrelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
+            const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0x964B00 }); // Brown barrel
+
+            const scrapGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.7); // Simple scrap shape
+            const scrapMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+
+            const grassGeometry = new THREE.PlaneGeometry(0.5, 1);
+             const grassMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55, side: THREE.DoubleSide, alphaTest: 0.5 }); // Use alphaTest for potential transparency later
+
+
+            for (let i = 0; i < 100; i++) {
+                // Trees
+                if (Math.random() < 0.2) {
+                    const tree = new THREE.Mesh(treeGeometry, treeMaterial);
+                    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+                    tree.position.set(
+                        (Math.random() - 0.5) * 400,
+                        2.5, // Half height of trunk
+                        (Math.random() - 0.5) * 400
+                    );
+                    tree.castShadow = true;
+                    tree.receiveShadow = true;
+                    leaves.position.y = 5; // Position leaves relative to trunk base
+                    tree.add(leaves); // Attach leaves to trunk
+                    tree.userData = { type: 'tree', health: 100 }; // Add data for interaction
+                    scene.add(tree);
+                    gameObjects.push(tree);
+                    collidableObjects.push(tree); // Trees are collidable
+                    interactableObjects.push(tree); // Trees are interactable
+                }
+
+                // Rocks
+                if (Math.random() < 0.1) {
+                    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+                     rock.scale.set(Math.random() * 1 + 0.5, Math.random() * 1 + 0.5, Math.random() * 1 + 0.5); // Vary size
+                    rock.position.set(
+                        (Math.random() - 0.5) * 400,
+                         rock.geometry.parameters.radius * rock.scale.y, // Place on ground
+                        (Math.random() - 0.5) * 400
+                    );
+                    rock.castShadow = true;
+                     rock.userData = { type: 'rock', health: 150 };
+                    scene.add(rock);
+                    gameObjects.push(rock);
+                    collidableObjects.push(rock);
+                    interactableObjects.push(rock);
+                }
+
+                 // Tall Grass
+                 if (Math.random() < 0.3) {
+                     const grass = new THREE.Mesh(grassGeometry, grassMaterial);
+                     grass.position.set(
+                         (Math.random() - 0.5) * 400,
+                         0.5, // Half height
+                         (Math.random() - 0.5) * 400
+                     );
+                     // Make grass face camera roughly (simple billboard effect)
+                     grass.rotation.y = Math.random() * Math.PI * 2;
+                     grass.userData = { type: 'grass' };
+                     scene.add(grass);
+                     gameObjects.push(grass);
+                     // Not usually collidable, but interactable
+                     interactableObjects.push(grass);
+                 }
+
+                 // Scrap Metal
+                  if (Math.random() < 0.05) {
+                     const scrap = new THREE.Mesh(scrapGeometry, scrapMaterial);
+                     scrap.position.set(
+                         (Math.random() - 0.5) * 400,
+                         0.05, // On ground
+                         (Math.random() - 0.5) * 400
+                     );
+                     scrap.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI); // Random rotation
+                     scrap.castShadow = true;
+                     scrap.userData = { type: 'scrap' };
+                     scene.add(scrap);
+                     gameObjects.push(scrap);
+                     interactableObjects.push(scrap);
+                 }
+
+                 // Barrels (loot containers)
+                 if (Math.random() < 0.03) {
+                     const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+                     barrel.position.set(
+                         (Math.random() - 0.5) * 400,
+                         0.5, // Half height
+                         (Math.random() - 0.5) * 400
+                     );
+                     barrel.castShadow = true;
+                     barrel.userData = { type: 'barrel', searched: false, loot: generateLoot() };
+                     scene.add(barrel);
+                     gameObjects.push(barrel);
+                     // Barrels might be collidable or not depending on game design
+                     // collidableObjects.push(barrel);
+                     interactableObjects.push(barrel);
+                 }
+            }
+
+             // Buildings (simple boxes)
+             for (let i = 0; i < 5; i++) {
+                 const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+                 building.position.set(
+                     (Math.random() - 0.5) * 300,
+                     3, // Half height
+                     (Math.random() - 0.5) * 300
+                 );
+                 building.castShadow = true;
+                 building.receiveShadow = true;
+                 building.userData = { type: 'building' };
+                 scene.add(building);
+                 gameObjects.push(building);
+                 collidableObjects.push(building);
+                 // Buildings themselves aren't directly interactable, but might contain loot crates
+                 // TODO: Add doorway logic and place loot crates inside
+             }
+
+             // Simple "Animals" (e.g., spheres)
+              const animalGeometry = new THREE.SphereGeometry(0.6, 16, 8);
+              const animalMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaa55 }); // Brownish
+              for (let i = 0; i < 10; i++) {
+                 const animal = new THREE.Mesh(animalGeometry, animalMaterial);
+                 animal.position.set(
+                     (Math.random() - 0.5) * 350,
+                     0.6, // On ground
+                     (Math.random() - 0.5) * 350
+                 );
+                 animal.castShadow = true;
+                 animal.userData = {
+                     type: 'animal',
+                     health: 50,
+                     targetPosition: new THREE.Vector3().copy(animal.position), // For simple movement
+                     moveTimer: Math.random() * 5 // Timer for changing direction
+                 };
+                 scene.add(animal);
+                 gameObjects.push(animal);
+                 interactableObjects.push(animal); // Can be hunted
+                 // Animals are usually not collidable with the player in simple implementations
+             }
+
+            console.log("World generated:", gameObjects.length, "total objects,", collidableObjects.length, "collidable.");
+        }
+
+        function generateLoot() {
+            // Simple loot generation for barrels/crates
+            const lootTable = [
+                { name: 'wood', count: Math.floor(Math.random() * 10) + 5 },
+                { name: 'stone', count: Math.floor(Math.random() * 8) + 3 },
+                { name: 'scrap', count: Math.floor(Math.random() * 5) + 1 },
+                { name: 'rope', count: Math.floor(Math.random() * 3) + 1 },
+                // { name: 'nails', count: Math.floor(Math.random() * 15) + 5 }, // Add nails later
+                { name: 'canteen', count: 1, chance: 0.1 }, // Chance to find a canteen
+                 { name: 'meat_raw', count: Math.floor(Math.random() * 2) + 1, chance: 0.2 },
+            ];
+            const generatedLoot = [];
+            lootTable.forEach(item => {
+                if (item.chance === undefined || Math.random() < item.chance) {
+                     if (item.count > 0) generatedLoot.push({ name: item.name, count: item.count });
+                }
+            });
+            return generatedLoot;
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            // Pointer Lock
+            blocker.addEventListener('click', () => {
+                if (gamePaused) { // Only lock if paused (prevents re-locking during gameplay)
+                   controls.lock();
+                }
+            });
+
+            controls.addEventListener('lock', () => {
+                instructions.style.display = 'none';
+                settingsContainer.style.display = 'none'; // Hide settings on start
+                blocker.style.display = 'none';
+                crosshair.style.display = 'block';
+                inventoryDisplay.style.display = 'none'; // Ensure inventory is closed
+                inventoryOpen = false;
+                gamePaused = false;
+                 if (!clock.running) clock.start(); // Start the clock if it wasn't running
+                animate(); // Start the animation loop *after* user interaction
+            });
+
+            controls.addEventListener('unlock', () => {
+                // Show pause menu / instructions again when ESC is pressed
+                blocker.style.display = 'flex';
+                 settingsContainer.style.display = 'none'; // Keep settings hidden after start
+                instructions.style.display = 'block'; // Show instructions/pause text
+                 // Adjust instructions text for pause state
+                 instructions.children[1].textContent = "Game Paused"; // Change title
+                crosshair.style.display = 'none';
+                gamePaused = true;
+                clock.stop(); // Stop the clock when paused
+            });
+
+             // Start Button
+             startButton.addEventListener('click', (event) => {
+                 event.stopPropagation(); // Prevent blocker click event
+                 applyStartingSettings(); // Apply settings chosen
+                 updateInventoryUI(); // Update UI based on potential starting items
+                 updateQuickBarUI();
+                 controls.lock(); // Attempt to lock pointer and start game
+             });
+
+            // Keyboard Input
+            const keyStates = {};
+            document.addEventListener('keydown', (event) => {
+                keyStates[event.code] = true;
+                handleKeyPress(event.code); // Handle single press events
+            });
+            document.addEventListener('keyup', (event) => {
+                keyStates[event.code] = false;
+            });
+
+            // Assign continuous updates to the game loop (update function)
+            window.handleContinuousKeys = () => {
+                if (gamePaused || inventoryOpen) return; // Don't move if paused or inventory is open
+
+                playerVelocity.x = 0;
+                playerVelocity.z = 0;
+                const moveSpeed = playerSpeedFactor * clock.getDelta(); // Use delta time for frame-rate independence
+
+                if (keyStates['KeyW'] || keyStates['ArrowUp']) {
+                    controls.moveForward(moveSpeed);
+                }
+                if (keyStates['KeyS'] || keyStates['ArrowDown']) {
+                    controls.moveForward(-moveSpeed);
+                }
+                if (keyStates['KeyA'] || keyStates['ArrowLeft']) {
+                    controls.moveRight(-moveSpeed);
+                }
+                if (keyStates['KeyD'] || keyStates['ArrowRight']) {
+                    controls.moveRight(moveSpeed);
+                }
+                 // Check floor before jumping
+                 if (keyStates['Space'] && playerOnFloor) {
+                     playerVelocity.y = JUMP_VELOCITY;
+                     playerOnFloor = false; // No longer on floor after jumping
+                 }
+            };
+
+            // Handle single key presses (inventory, interaction, slot selection)
+            function handleKeyPress(code) {
+                 if (code === 'Escape') {
+                      // Pointer lock handles its own unlock/pause logic via 'unlock' event
+                      // If inventory is open, close it first
+                      if (inventoryOpen) {
+                          toggleInventory();
+                      } // Otherwise ESC will trigger pointer unlock
+                 }
+
+                 if (gamePaused) return; // Don't process game keys if paused
+
+                 if (code === 'Tab') {
+                     event.preventDefault(); // Prevent tabbing out of the window
+                     toggleInventory();
+                 } else if (code === 'KeyE') {
+                     handleInteraction();
+                 } else if (code >= 'Digit1' && code <= 'Digit5') {
+                     selectQuickSlot(parseInt(code.slice(-1)) - 1);
+                 }
+                 // Add other keybinds here (e.g., C for craft menu)
+            }
+
+
+             // Mouse clicks (for inventory interaction primarily)
+             inventoryDisplay.addEventListener('click', (event) => {
+                 if (!inventoryOpen) return;
+
+                 const target = event.target.closest('.inventory-slot');
+                 if (target && target.dataset.index !== undefined) {
+                     const invIndex = parseInt(target.dataset.index);
+                     if (event.shiftKey) {
+                         // Shift + Click: Move to quick bar
+                         moveItemToQuickBar(invIndex);
+                     } else {
+                         // Simple Click (future: select, drag, split stack?)
+                         console.log("Clicked inventory slot:", invIndex, inventory[invIndex]);
+                     }
+                 }
+             });
+
+              // Handle quick bar clicks (Shift + Click to move back to inventory)
+             quickSlotElements.forEach((slot, index) => {
+                 slot.addEventListener('click', (event) => {
+                     if (!inventoryOpen) { // Only interact with quickbar via click when inventory is open
+                         selectQuickSlot(index); // Normal click selects slot if inventory closed
+                         return;
+                     };
+
+                     if (event.shiftKey) {
+                         moveItemFromQuickBar(index);
+                     } else {
+                          // Simple click on quick bar slot while inventory open could select it?
+                          console.log("Clicked quick slot:", index, quickBar[index]);
+                          // Maybe swap with selected inventory item in future?
+                     }
+                 });
+             });
+
+
+            // Window Resize
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Game Loop ---
+        function animate() {
+            if (gamePaused) {
+                // If paused, we stop requesting new frames until unpaused
+                 // The 'lock' event listener will call animate() again when unpaused
+                return;
+            }
+
+            requestAnimationFrame(animate); // Request next frame
+
+            const delta = clock.getDelta(); // Get time since last frame
+
+            update(delta); // Update game logic
+            render();      // Render the scene
+        }
+
+        // --- Update Logic ---
+        function update(delta) {
+            if (gamePaused) return;
+
+            // Handle Movement Input (continuous keys)
+            handleContinuousKeys();
+
+            // Apply Gravity
+            if (!playerOnFloor) {
+                playerVelocity.y -= GRAVITY * delta;
+            }
+
+             // Store previous position for collision response
+            const oldPosition = controls.getObject().position.clone();
+
+            // Update Player Position based on velocity (potential next position)
+            controls.getObject().position.y += playerVelocity.y * delta;
+
+            // --- Basic Collision Detection & Response ---
+            playerOnFloor = false; // Assume not on floor until check proves otherwise
+            const playerCollider = new THREE.Box3().setFromCenterAndSize(
+                controls.getObject().position.clone().sub(new THREE.Vector3(0, playerHeight / 2, 0)), // Center at player feet
+                new THREE.Vector3(0.6, playerHeight, 0.6) // Player dimensions (adjust width/depth)
+            );
+
+
+            collidableObjects.forEach(obj => {
+                // Ensure object has geometry and matrix updated
+                 if (!obj.geometry) return;
+                 obj.updateMatrixWorld(); // Ensure world matrix is up-to-date
+
+                 // Get object's bounding box in world space
+                 const objCollider = new THREE.Box3().setFromObject(obj);
+
+                 if (playerCollider.intersectsBox(objCollider)) {
+                      // Simple collision response: push player back
+                      // This is basic and can be glitchy. A physics engine is better.
+
+                      const penetration = new THREE.Vector3();
+                      playerCollider.intersect(objCollider, penetration); // This might not work as expected directly
+
+                     // More reliable: Check axis overlap and push back
+                     const centerPlayer = new THREE.Vector3();
+                     const sizePlayer = new THREE.Vector3();
+                     playerCollider.getCenter(centerPlayer);
+                     playerCollider.getSize(sizePlayer);
+
+                     const centerObj = new THREE.Vector3();
+                     const sizeObj = new THREE.Vector3();
+                     objCollider.getCenter(centerObj);
+                     objCollider.getSize(sizeObj);
+
+                     const dx = centerPlayer.x - centerObj.x;
+                     const px = (sizePlayer.x / 2 + sizeObj.x / 2) - Math.abs(dx);
+                     const dy = centerPlayer.y - centerObj.y;
+                     const py = (sizePlayer.y / 2 + sizeObj.y / 2) - Math.abs(dy);
+                     const dz = centerPlayer.z - centerObj.z;
+                     const pz = (sizePlayer.z / 2 + sizeObj.z / 2) - Math.abs(dz);
+
+
+                     if (px < py && px < pz) { // Penetration primarily on X axis
+                         controls.getObject().position.x += px * Math.sign(dx);
+                     } else if (py < px && py < pz) { // Penetration primarily on Y axis
+                          controls.getObject().position.y += py * Math.sign(dy);
+                          // If pushed up from below, we are on the floor
+                          if (Math.sign(dy) > 0) {
+                               playerOnFloor = true;
+                               playerVelocity.y = 0; // Stop falling
+                          } else {
+                              // If hit ceiling, stop upward movement
+                              playerVelocity.y = Math.min(0, playerVelocity.y);
+                          }
+                     } else { // Penetration primarily on Z axis
+                         controls.getObject().position.z += pz * Math.sign(dz);
+                     }
+
+                      // Re-calculate collider after position adjustment for next collision check if needed
+                      // playerCollider.setFromCenterAndSize(...)
+                 }
+             });
+
+
+            // Prevent falling through floor (y=0)
+            if (controls.getObject().position.y < playerHeight / 2) { // Check based on collider center offset
+                 controls.getObject().position.y = playerHeight / 2;
+                playerVelocity.y = 0;
+                playerOnFloor = true;
+            }
+
+
+             // Update simple animal movement
+             updateAnimals(delta);
+
+             // TODO: Update other game systems (hunger, thirst, time, crafting progress, cooking...)
+        }
+
+        function updateAnimals(delta) {
+             gameObjects.forEach(obj => {
+                 if (obj.userData.type === 'animal') {
+                     obj.userData.moveTimer -= delta;
+
+                     // If timer <= 0, pick a new random target position nearby
+                     if (obj.userData.moveTimer <= 0) {
+                         const moveRange = 15; // How far to wander
+                         obj.userData.targetPosition.x = obj.position.x + (Math.random() - 0.5) * moveRange * 2;
+                         obj.userData.targetPosition.z = obj.position.z + (Math.random() - 0.5) * moveRange * 2;
+                         obj.userData.targetPosition.y = obj.position.y; // Keep height for now
+                         obj.userData.moveTimer = Math.random() * 5 + 3; // Reset timer (3-8 seconds)
+                     }
+
+                     // Move towards target position (very simple lerp)
+                     const moveSpeed = 1.0 * delta; // Animal speed
+                     obj.position.lerp(obj.userData.targetPosition, moveSpeed * 0.1); // Adjust lerp factor for smoothness
+
+                      // Keep animal on ground (simple check)
+                       if (obj.position.y < obj.geometry.parameters.radius) {
+                           obj.position.y = obj.geometry.parameters.radius;
+                       }
+                 }
+             });
+         }
+
+
+        // --- Rendering ---
+        function render() {
+            renderer.render(scene, camera);
+        }
+
+        // --- Interaction Logic ---
+        function handleInteraction() {
+            if (gamePaused || inventoryOpen) return;
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera({ x: 0, y: 0 }, camera); // Ray from center of screen
+
+            const intersects = raycaster.intersectObjects(interactableObjects); // Check against interactable objects only
+
+            if (intersects.length > 0) {
+                const intersection = intersects[0];
+                const object = intersection.object;
+                const distance = intersection.distance;
+
+                // If object is part of a hierarchy (like leaves on a tree), get the parent
+                 const mainObject = object.parent && object.parent.userData.type ? object.parent : object;
+
+                if (distance <= INTERACTION_DISTANCE) {
+                    const data = mainObject.userData;
+                    const selectedItem = quickBar[selectedQuickSlot];
+                    const selectedItemName = selectedItem ? selectedItem.name : null;
+
+                    console.log("Interacting with:", data.type, mainObject); // Debugging
+
+                    switch (data.type) {
+                        case 'tree':
+                            if (selectedItemName === 'axe') {
+                                // TODO: Damage tree, check health, drop wood
+                                showMessage("Chopping tree... (Needs Axe equipped)");
+                                data.health -= 25; // Example damage
+                                if (data.health <= 0) {
+                                     showMessage(`Tree felled! +${5 + Math.floor(Math.random()*5)} wood`);
+                                     addInventoryItem('wood', 5 + Math.floor(Math.random()*5));
+                                     removeGameObject(mainObject);
+                                } else {
+                                     showMessage(`Chopped tree! (${data.health} HP)`);
+                                }
+                            } else {
+                                showMessage("Need an axe to chop trees.");
+                            }
+                            break;
+                        case 'rock':
+                            if (selectedItemName === 'pickaxe') {
+                                // TODO: Damage rock, check health, drop stone
+                                 showMessage("Mining rock... (Needs Pickaxe equipped)");
+                                 data.health -= 20; // Example damage
+                                 if (data.health <= 0) {
+                                     showMessage(`Rock broken! +${3 + Math.floor(Math.random()*4)} stone`);
+                                     addInventoryItem('stone', 3 + Math.floor(Math.random()*4));
+                                     removeGameObject(mainObject);
+                                 } else {
+                                     showMessage(`Mined rock! (${data.health} HP)`);
+                                 }
+                            } else {
+                                showMessage("Need a pickaxe to mine rocks.");
+                            }
+                            break;
+                        case 'grass':
+                             showMessage("Harvested +1 fiber");
+                             addInventoryItem('fiber', 1);
+                             removeGameObject(mainObject); // Grass is usually one-time harvest
+                            break;
+                        case 'scrap':
+                             showMessage("Collected +1 scrap metal");
+                             addInventoryItem('scrap', 1);
+                             removeGameObject(mainObject);
+                            break;
+                         case 'barrel':
+                             if (!data.searched) {
+                                 showMessage("Searched barrel!");
+                                 data.loot.forEach(item => addInventoryItem(item.name, item.count));
+                                 data.searched = true; // Mark as searched
+                                 // Optionally change barrel appearance or remove it
+                             } else {
+                                 showMessage("Barrel is empty.");
+                             }
+                             break;
+                         case 'animal':
+                             if (selectedItemName === 'knife' || selectedItemName === 'axe') { // Axe might also work
+                                 showMessage("Attacking animal... (Needs weapon equipped)");
+                                 data.health -= 30; // Example damage
+                                 if (data.health <= 0) {
+                                     let meat = 1 + Math.floor(Math.random()*2);
+                                     // let leather = Math.random() > 0.5 ? 1 : 0; // Add leather later
+                                     // let fat = Math.random() > 0.3 ? 1 : 0; // Add fat later
+                                     showMessage(`Killed animal! +${meat} raw meat`);
+                                     addInventoryItem('meat_raw', meat);
+                                     // addInventoryItem('leather', leather);
+                                     // addInventoryItem('fat', fat);
+                                     removeGameObject(mainObject);
+                                 } else {
+                                      showMessage(`Attacked animal! (${data.health} HP)`);
+                                 }
+                             } else {
+                                 showMessage("Need a weapon to hunt.");
+                             }
+                             break;
+                         // Add cases for crates inside buildings, campfires, forges etc.
+                        default:
+                            showMessage(`Cannot interact with ${data.type || 'this object'}.`);
+                    }
+                }
+            }
+        }
+
+        function removeGameObject(objectToRemove) {
+            // Remove from scene
+            scene.remove(objectToRemove);
+
+            // Remove from game arrays
+            let index = gameObjects.indexOf(objectToRemove);
+            if (index > -1) gameObjects.splice(index, 1);
+
+            index = collidableObjects.indexOf(objectToRemove);
+            if (index > -1) collidableObjects.splice(index, 1);
+
+            index = interactableObjects.indexOf(objectToRemove);
+            if (index > -1) interactableObjects.splice(index, 1);
+
+             console.log("Removed object:", objectToRemove.userData.type);
+        }
+
+
+        // --- Inventory & Crafting Logic ---
+
+        function addInventoryItem(itemName, count = 1) {
+            if (count <= 0) return;
+            // Check if item already exists (stackable) - implement stack limits later
+            const existingItem = inventory.find(item => item && item.name === itemName);
+            if (existingItem) {
+                existingItem.count += count;
+            } else {
+                // Find first empty slot
+                const emptySlotIndex = inventory.findIndex(item => item === null || item === undefined);
+                if (emptySlotIndex !== -1 && emptySlotIndex < INVENTORY_SIZE) {
+                    inventory[emptySlotIndex] = { name: itemName, count: count };
+                } else if (inventory.length < INVENTORY_SIZE) {
+                    // Or add to end if array hasn't reached max size yet
+                     inventory.push({ name: itemName, count: count });
+                }
+                else {
+                    showMessage(`Inventory full! Could not add ${itemName}.`);
+                    return; // Indicate failure maybe?
+                }
+            }
+            updateInventoryUI();
+            updateQuickBarUI(); // In case the item added is also in quick bar
+        }
+
+         function removeInventoryItem(itemName, count = 1) {
+            let remainingToRemove = count;
+
+            // Prioritize removing from quick bar first if item matches
+            for (let i = 0; i < quickBar.length; i++) {
+                 if (remainingToRemove <= 0) break;
+                 const qItem = quickBar[i];
+                 if (qItem && qItem.name === itemName) {
+                     const amountToRemove = Math.min(remainingToRemove, qItem.count);
+                     qItem.count -= amountToRemove;
+                     remainingToRemove -= amountToRemove;
+                     if (qItem.count <= 0) {
+                         quickBar[i] = null; // Remove item from quick slot
+                     }
+                 }
+             }
+
+            // Then remove from general inventory
+             for (let i = 0; i < inventory.length; i++) {
+                 if (remainingToRemove <= 0) break;
+                 const invItem = inventory[i];
+                 if (invItem && invItem.name === itemName) {
+                     const amountToRemove = Math.min(remainingToRemove, invItem.count);
+                     invItem.count -= amountToRemove;
+                     remainingToRemove -= amountToRemove;
+                     if (invItem.count <= 0) {
+                         inventory[i] = null; // Clear slot
+                     }
+                 }
+             }
+
+             updateInventoryUI();
+             updateQuickBarUI();
+
+             return count - remainingToRemove; // Return amount actually removed
+         }
+
+         function countItem(itemName) {
+             let total = 0;
+             quickBar.forEach(item => { if (item && item.name === itemName) total += item.count });
+             inventory.forEach(item => { if (item && item.name === itemName) total += item.count });
+             return total;
+         }
+
+
+        function toggleInventory() {
+            inventoryOpen = !inventoryOpen;
+            inventoryDisplay.style.display = inventoryOpen ? 'grid' : 'none';
+            // If opening inventory, release pointer lock and pause
+            if (inventoryOpen) {
+                if (controls.isLocked) {
+                   controls.unlock(); // This will trigger the 'unlock' event listener which handles pausing
+                }
+                 gamePaused = true; // Explicitly pause
+                 if (clock.running) clock.stop();
+                 crosshair.style.display = 'none'; // Hide crosshair when inventory open
+            } else {
+                // If closing, try to re-lock pointer (user needs to click)
+                blocker.style.display = 'flex'; // Show blocker to prompt click
+                 settingsContainer.style.display = 'none';
+                instructions.style.display = 'block';
+                 instructions.children[1].textContent = "Click to Resume"; // Change title
+                 // Game remains paused until user clicks and locks pointer again
+            }
+        }
+
+
+         function moveItemToQuickBar(invIndex, targetQuickSlot = -1) {
+             if (invIndex < 0 || invIndex >= inventory.length || !inventory[invIndex]) return; // Invalid source
+
+             let targetSlot = -1;
+             if (targetQuickSlot >= 0 && targetQuickSlot < quickBar.length) {
+                 targetSlot = targetQuickSlot; // Specific slot requested
+             } else {
+                 // Find first empty quick slot
+                 targetSlot = quickBar.findIndex(slot => slot === null);
+             }
+
+             if (targetSlot === -1) {
+                 showMessage("Quick bar is full!");
+                 return;
+             }
+
+             // Swap items if target slot is not empty
+             const itemToMove = inventory[invIndex];
+             inventory[invIndex] = quickBar[targetSlot]; // Place quickbar item (or null) into inventory
+             quickBar[targetSlot] = itemToMove; // Place inventory item into quickbar
+
+             updateInventoryUI();
+             updateQuickBarUI();
+         }
+
+         function moveItemFromQuickBar(quickIndex) {
+              if (quickIndex < 0 || quickIndex >= quickBar.length || !quickBar[quickIndex]) return; // Invalid source
+
+              // Find first empty inventory slot
+              let targetSlot = inventory.findIndex(slot => slot === null || slot === undefined);
+             if (targetSlot === -1 && inventory.length < INVENTORY_SIZE) {
+                 targetSlot = inventory.length; // Add to end if space
+                 inventory.push(null); // Make space explicitly if needed
+             }
+
+
+             if (targetSlot === -1) {
+                 showMessage("Inventory is full!");
+                 return;
+             }
+
+             // Swap items
+             const itemToMove = quickBar[quickIndex];
+              inventory[targetSlot] = itemToMove; // Place quickbar item into inventory
+              quickBar[quickIndex] = null; // Clear quickbar slot
+
+             updateInventoryUI();
+             updateQuickBarUI();
+         }
+
+
+        // --- UI Updates ---
+
+        function createInventorySlots() {
+            inventoryDisplay.innerHTML = ''; // Clear previous slots
+             inventory.length = INVENTORY_SIZE; // Ensure inventory array has fixed size
+             inventory.fill(null, inventory.length); // Fill potentially undefined spots with null
+
+            for (let i = 0; i < INVENTORY_SIZE; i++) {
+                const slot = document.createElement('div');
+                slot.classList.add('inventory-slot');
+                slot.dataset.index = i; // Store index for click events
+                inventoryDisplay.appendChild(slot);
+            }
+        }
+
+         function updateInventoryUI() {
+             const slots = inventoryDisplay.children;
+             for (let i = 0; i < INVENTORY_SIZE; i++) {
+                 const slot = slots[i];
+                 const item = inventory[i];
+                 if (item) {
+                     slot.innerHTML = `<span class="item-count">${item.count}</span>`;
+                     slot.className = `inventory-slot item-${item.name}`; // Use class for item icon via CSS
+                 } else {
+                     slot.innerHTML = '';
+                     slot.className = 'inventory-slot'; // Reset class
+                 }
+             }
+         }
+
+         function updateQuickBarUI() {
+             for (let i = 0; i < quickBar.length; i++) {
+                 const slot = quickSlotElements[i];
+                 const item = quickBar[i];
+                 if (item) {
+                     slot.innerHTML = `<span class="item-count">${item.count}</span>`;
+                      slot.className = `quick-slot item-${item.name}`; // Use class for item icon via CSS
+                 } else {
+                     slot.innerHTML = '';
+                     slot.className = 'quick-slot'; // Reset class
+                 }
+                 // Highlight selected slot
+                 if (i === selectedQuickSlot) {
+                     slot.classList.add('selected');
+                 } else {
+                     slot.classList.remove('selected');
+                 }
+             }
+         }
+
+         function selectQuickSlot(index) {
+             if (index < 0 || index >= quickBar.length) return;
+             selectedQuickSlot = index;
+             updateQuickBarUI(); // Update UI to show new selection
+              const selectedItem = quickBar[selectedQuickSlot];
+              showMessage(`Selected: ${selectedItem ? selectedItem.name : 'Empty Slot'}`, 1500); // Short message
+         }
+
+          function showMessage(text, duration = 3000) {
+             messageDisplay.textContent = text;
+             messageDisplay.style.display = 'block';
+             // Clear previous timer if any
+             if (messageDisplay.timer) clearTimeout(messageDisplay.timer);
+             // Set new timer to hide message
+             messageDisplay.timer = setTimeout(() => {
+                 messageDisplay.style.display = 'none';
+                 messageDisplay.timer = null;
+             }, duration);
+         }
+
+
+        // --- Placeholder Functions ---
+        function craftItem(itemName) {
+             // TODO: Implement crafting logic
+             // 1. Check if recipe exists
+             // 2. Check if player has required resources (use countItem)
+             // 3. Remove resources (use removeInventoryItem)
+             // 4. Add crafted item (use addInventoryItem - prioritize quick bar)
+             showMessage(`Crafting for ${itemName} not implemented yet.`);
+         }
+
+         function cookMeat() {
+             // TODO: Check for campfire nearby, raw meat selected/in inventory
+             // Start 30 second timer, then replace raw meat with cooked meat
+             showMessage("Cooking not implemented yet.");
+         }
+
+         function boilWater() {
+              // TODO: Check for campfire, canteen selected/in inventory
+              // Start timer, change canteen state to 'boiled'
+              showMessage("Water purification not implemented yet.");
+         }
+
+        // --- Start Game ---
+        init(); // Initialize everything
+
+        // Game doesn't start rendering/updating until user clicks and locks pointer via the 'lock' event
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+<!-- Loading Three.js library locally -->
+<script src="./three.min.js"></script> 
+<!-- Loading PointerLockControls locally -->
+<script src="./PointerLockControls.js"></script> 

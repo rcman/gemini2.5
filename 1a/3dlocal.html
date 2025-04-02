@@ -1,0 +1,1199 @@
+import * as THREE from 'three';
+import { PointerLockControls } from 'PointerLockControls';
+
+// --- Configuration ---
+const SETTINGS = {
+    startResources: 'medium', // Set by user later
+    playerSpeed: 300.0,       // Set by user later
+    playerHeight: 1.8,        // Set by user later
+    playerRadius: 0.4,        // For collision
+    gravity: 30.0,
+    jumpHeight: 10.0,
+    mouseSensitivity: 0.002,
+    worldSize: 100, // Size of the ground plane
+    numTrees: 50,
+    numRocks: 30,
+    numAnimals: 5, // Placeholders
+    numBarrels: 10,
+    numBuildings: 3,
+    inventorySize: 20,
+    quickBarSize: 5,
+};
+
+// --- Global Variables ---
+let camera, scene, renderer, controls;
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let playerCollider; // Bounding box for the player
+let worldObjects = []; // For collision detection (trees, rocks, buildings)
+const clock = new THREE.Clock();
+let gameStarted = false;
+
+// Player State & Inventory
+const playerState = {
+    health: 100,
+    hunger: 100,
+    thirst: 100,
+    inventory: new Array(SETTINGS.inventorySize).fill(null), // { item: 'wood', quantity: 10 }
+    quickBar: new Array(SETTINGS.quickBarSize).fill(null),
+    selectedQuickSlot: 0, // Index of the selected quick bar slot
+    startingItems: { // Defined by settings later
+        'low': [],
+        'medium': [{ item: 'Axe', quantity: 1 }, { item: 'Pickaxe', quantity: 1 }, { item: 'Knife', quantity: 1 }, { item: 'Canteen', quantity: 1 }],
+        'high': [{ item: 'Axe', quantity: 1 }, { item: 'Pickaxe', quantity: 1 }, { item: 'Knife', quantity: 1 }, { item: 'Canteen', quantity: 1 }, { item: 'Wood', quantity: 20 }, { item: 'Stone', quantity: 10 }]
+    },
+    canteenWater: 0, // 0 = empty, 1 = dirty, 2 = clean
+    isInventoryOpen: false,
+    isCraftingOpen: false, // Add later if needed
+};
+
+const craftingRecipes = {
+    'Axe': [{ item: 'Wood', quantity: 3 }, { item: 'Stone', quantity: 2 }],
+    'Pickaxe': [{ item: 'Wood', quantity: 2 }, { item: 'Stone', quantity: 3 }],
+    'Campfire': [{ item: 'Wood', quantity: 5 }, { item: 'Stone', quantity: 2 }],
+    'Crafting Table': [{ item: 'Wood', quantity: 10 }],
+    'Forge': [{ item: 'Stone', quantity: 15 }, { item: 'Wood', quantity: 5 }],
+    'Rope': [{ item: 'Tall Grass', quantity: 5 }],
+};
+
+
+// --- Check for Three.js ---
+if (typeof THREE === 'undefined') {
+    document.getElementById('threejs-check').textContent = 'Error: Three.js library not found. Please check the path.';
+    document.getElementById('threejs-check').style.color = 'red';
+    // Optionally disable the start button or show a more prominent error
+} else {
+    document.getElementById('threejs-check').textContent = 'Three.js loaded successfully!';
+     document.getElementById('threejs-check').style.color = 'lightgreen';
+    setupStartScreen(); // Setup interaction only if Three.js is loaded
+}
+
+
+// --- Start Screen Logic ---
+function setupStartScreen() {
+    const blocker = document.getElementById('blocker');
+    const instructions = document.getElementById('instructions');
+    const startResSelect = document.getElementById('startResources');
+    const speedSlider = document.getElementById('playerSpeed');
+    const heightSlider = document.getElementById('playerHeight');
+
+    // Initial setup based on default settings
+    startResSelect.value = SETTINGS.startResources;
+    speedSlider.value = SETTINGS.playerSpeed;
+    heightSlider.value = SETTINGS.playerHeight;
+
+    blocker.addEventListener('click', function () {
+        if (!gameStarted && typeof THREE !== 'undefined') {
+            // Read final settings from UI
+            SETTINGS.startResources = startResSelect.value;
+            SETTINGS.playerSpeed = parseFloat(speedSlider.value);
+            SETTINGS.playerHeight = parseFloat(heightSlider.value);
+            camera.position.y = SETTINGS.playerHeight; // Set initial camera height
+
+            startGame();
+        }
+    });
+}
+
+function startGame() {
+    console.log("Starting game with settings:", SETTINGS);
+    init();
+    addStartingItems();
+    updateInventoryUI(); // Initial UI update
+    updateQuickBarUI();
+    updateHUD();
+    animate();
+
+    // Lock pointer and hide start screen
+    controls.lock();
+    const blocker = document.getElementById('blocker');
+    blocker.style.display = 'none';
+    document.getElementById('crosshair').style.display = 'block';
+     document.getElementById('quickBar').style.display = 'flex'; // Or 'block'
+     document.getElementById('hud').style.display = 'block';
+    gameStarted = true;
+}
+
+// --- Initialization ---
+function init() {
+    // Scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb); // Sky blue
+    scene.fog = new THREE.Fog(0x87ceeb, 0, SETTINGS.worldSize * 0.75);
+
+    // Camera
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.y = SETTINGS.playerHeight; // Set initial height based on settings
+    playerCollider = new THREE.Box3( // Initialize player collider
+        new THREE.Vector3(),
+        new THREE.Vector3()
+    );
+    updatePlayerCollider(); // Set initial size/position
+
+
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true; // Enable shadows
+    document.body.appendChild(renderer.domElement);
+
+    // Controls
+    controls = new PointerLockControls(camera, document.body);
+    scene.add(controls.getObject()); // Add camera pivot to scene
+
+    controls.addEventListener('lock', function () {
+        console.log('Pointer Locked');
+         if (playerState.isInventoryOpen) toggleInventory(); // Close inventory if open
+         // if (playerState.isCraftingOpen) toggleCrafting(); // Close crafting if open
+    });
+
+    controls.addEventListener('unlock', function () {
+        console.log('Pointer Unlocked');
+        // Optional: Pause game, show menu
+        // For now, we re-show the blocker if game was started (e.g., user pressed ESC)
+        if (gameStarted) {
+             const blocker = document.getElementById('blocker');
+             blocker.style.display = 'flex'; // Show blocker again
+            document.getElementById('crosshair').style.display = 'none';
+             document.getElementById('quickBar').style.display = 'none';
+             document.getElementById('hud').style.display = 'none';
+             // Hide inventory/crafting if they were somehow left open
+             document.getElementById('inventoryScreen').style.display = 'none';
+             document.getElementById('craftingScreen').style.display = 'none';
+             playerState.isInventoryOpen = false;
+             playerState.isCraftingOpen = false;
+        }
+    });
+
+    // --- Lighting ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(50, 100, 50);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048; // Higher res shadow map
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 500;
+    // Adjust shadow camera bounds to cover the world
+    const shadowCamSize = SETTINGS.worldSize / 1.5;
+    directionalLight.shadow.camera.left = -shadowCamSize;
+    directionalLight.shadow.camera.right = shadowCamSize;
+    directionalLight.shadow.camera.top = shadowCamSize;
+    directionalLight.shadow.camera.bottom = -shadowCamSize;
+    scene.add(directionalLight);
+    // const helper = new THREE.CameraHelper( directionalLight.shadow.camera ); // Debug shadows
+    // scene.add( helper );                                                    // Debug shadows
+
+    // --- World Objects ---
+    createWorld();
+
+    // --- Event Listeners ---
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    window.addEventListener('resize', onWindowResize);
+    document.addEventListener('click', onMouseClick); // For interaction/gathering
+    document.addEventListener('mousemove', onMouseMove); // Needed if implementing item dragging later
+
+    // Initialize UI Elements
+    setupInventoryUI();
+    setupQuickBarUI();
+    // setupCraftingUI(); // Call this if you implement crafting recipes display
+}
+
+
+// --- World Creation ---
+function createWorld() {
+    // Ground
+    const groundGeometry = new THREE.PlaneGeometry(SETTINGS.worldSize, SETTINGS.worldSize);
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55, roughness: 0.8 }); // Greenish
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Trees (Simple Cylinders + Spheres)
+    for (let i = 0; i < SETTINGS.numTrees; i++) {
+        createTree(getRandomPosition());
+    }
+
+    // Rocks (Simple Icosahedrons)
+    for (let i = 0; i < SETTINGS.numRocks; i++) {
+        createRock(getRandomPosition());
+    }
+
+    // Animals (Placeholder Spheres) - **Needs significant expansion for animation/AI**
+    for (let i = 0; i < SETTINGS.numAnimals; i++) {
+        createAnimal(getRandomPosition());
+    }
+
+    // Barrels (Placeholder Cylinders) - **Needs interaction logic**
+    for (let i = 0; i < SETTINGS.numBarrels; i++) {
+        createBarrel(getRandomPosition());
+    }
+
+     // Buildings (Placeholder Cubes) - **Needs doorways, interiors, containers**
+     for (let i = 0; i < SETTINGS.numBuildings; i++) {
+        createBuilding(getRandomPosition());
+     }
+
+    // Water (Placeholder Plane) - **Needs visual treatment**
+    createWater();
+
+    // Tall Grass (Placeholder Sprites/Planes) - **Needs optimization if many**
+    createTallGrass();
+
+    // Scrap Metal (Placeholder small objects)
+    createScrapMetal();
+
+    // Nails (Likely loot, not placed directly in world in this simple version)
+}
+
+function getRandomPosition() {
+    const range = SETTINGS.worldSize / 2 - 5; // Keep away from edge
+    const x = Math.random() * range * 2 - range;
+    const z = Math.random() * range * 2 - range;
+    // TODO: Add check to prevent spawning inside other objects
+    return new THREE.Vector3(x, 0, z); // Y is determined by object type/ground
+}
+
+function createTree(position) {
+    const trunkHeight = Math.random() * 4 + 4; // 4 to 8
+    const trunkRadius = Math.random() * 0.3 + 0.2; // 0.2 to 0.5
+    const leavesHeight = Math.random() * 3 + 3; // 3 to 6
+    const leavesRadius = trunkRadius * 4;
+
+    const trunkGeo = new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.2, trunkHeight, 8);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.set(position.x, trunkHeight / 2, position.z);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    trunk.userData = { type: 'tree', health: 100, resource: 'Wood' }; // Example data
+    scene.add(trunk);
+
+    const leavesGeo = new THREE.SphereGeometry(leavesRadius, 8, 6); // Simplified leaves
+    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22 }); // Forest green
+    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+    leaves.position.set(position.x, trunkHeight + leavesHeight / 2 - 1, position.z); // Position above trunk
+    leaves.castShadow = true;
+    leaves.receiveShadow = true;
+    leaves.userData = { type: 'tree_leaves' }; // Not directly collidable/harvestable here
+    scene.add(leaves);
+
+    // Add trunk to collision objects
+    const trunkCollider = new THREE.Box3().setFromObject(trunk);
+    worldObjects.push({ mesh: trunk, collider: trunkCollider });
+}
+
+function createRock(position) {
+    const size = Math.random() * 1 + 0.5; // 0.5 to 1.5
+    const geometry = new THREE.IcosahedronGeometry(size, 0); // Low poly rock
+    const material = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.7 }); // Grey
+    const rock = new THREE.Mesh(geometry, material);
+    rock.position.set(position.x, size / 2, position.z); // Sit on ground
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    rock.userData = { type: 'rock', health: 50, resource: 'Stone' };
+    scene.add(rock);
+
+    const rockCollider = new THREE.Box3().setFromObject(rock);
+    worldObjects.push({ mesh: rock, collider: rockCollider });
+}
+
+function createAnimal(position) {
+    // VERY basic placeholder
+    const size = 0.5;
+    const geometry = new THREE.SphereGeometry(size, 8, 6);
+    const material = new THREE.MeshStandardMaterial({ color: 0xD2691E }); // Brownish
+    const animal = new THREE.Mesh(geometry, material);
+    animal.position.set(position.x, size, position.z);
+    animal.castShadow = true;
+    animal.userData = { type: 'animal', health: 30, resources: ['Meat', 'Leather', 'Fat'], speed: Math.random() * 0.5 + 0.1 };
+    scene.add(animal);
+    // Animals are NOT added to static worldObjects for collision in this simple example
+    // They would need their own movement and collision logic
+}
+
+function createBarrel(position) {
+    const radius = 0.4;
+    const height = 1.0;
+    const geometry = new THREE.CylinderGeometry(radius, radius, height, 12);
+    const material = new THREE.MeshStandardMaterial({ color: 0xCD853F }); // Peru (brownish)
+    const barrel = new THREE.Mesh(geometry, material);
+    barrel.position.set(position.x, height / 2, position.z);
+    barrel.castShadow = true;
+    barrel.receiveShadow = true;
+    barrel.userData = { type: 'barrel', searchable: true, lootTable: ['Scrap Metal', 'Nails', 'Canteen'] }; // Example loot
+    scene.add(barrel);
+
+    const barrelCollider = new THREE.Box3().setFromObject(barrel);
+    worldObjects.push({ mesh: barrel, collider: barrelCollider });
+}
+
+function createBuilding(position) {
+     // VERY basic placeholder - just a box
+     const width = Math.random() * 5 + 5; // 5-10
+     const depth = Math.random() * 5 + 5; // 5-10
+     const height = 3;
+     const geometry = new THREE.BoxGeometry(width, height, depth);
+     const material = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, side: THREE.DoubleSide }); // Grey, render inside too
+     const building = new THREE.Mesh(geometry, material);
+     building.position.set(position.x, height / 2, position.z);
+     building.castShadow = true;
+     building.receiveShadow = true; // Ground casts shadows on it
+     building.userData = { type: 'building' };
+     scene.add(building);
+
+     // For simplicity, treat the whole building as one collider block
+     const buildingCollider = new THREE.Box3().setFromObject(building);
+     worldObjects.push({ mesh: building, collider: buildingCollider });
+
+     // TODO: Add doorways (by subtracting geometry or using multiple meshes)
+     // TODO: Add searchable containers *inside* the building bounds
+}
+
+function createWater() {
+    // Basic plane for water
+    const waterSize = SETTINGS.worldSize * 0.3; // A smaller area for water
+    const waterGeo = new THREE.PlaneGeometry(waterSize, waterSize);
+    const waterMat = new THREE.MeshStandardMaterial({
+        color: 0x006994, // Bluish
+        transparent: true,
+        opacity: 0.75,
+        roughness: 0.2,
+        metalness: 0.1
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.rotation.x = -Math.PI / 2;
+    // Position it slightly lower than ground or in a specific area
+    water.position.set(SETTINGS.worldSize * 0.25, -0.1, SETTINGS.worldSize * 0.25); // Example position
+    water.userData = { type: 'water_source' };
+    scene.add(water);
+    // Water is not collidable by default here, player would fall through
+}
+
+function createTallGrass() {
+    // Placeholder: Could use planes with textures, sprites, or instanced meshes for performance
+    const grassCount = 200;
+    for (let i = 0; i < grassCount; i++) {
+        const pos = getRandomPosition();
+        // Avoid spawning directly on rocks/trees - more checks needed for robustness
+        if (pos.length() < SETTINGS.worldSize * 0.4) { // Example: only in central area
+             const height = Math.random() * 0.5 + 0.3;
+             // Simple plane geometry for grass blade
+             const geom = new THREE.PlaneGeometry(0.1, height);
+             const mat = new THREE.MeshBasicMaterial({ color: 0x339933, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+             const blade = new THREE.Mesh(geom, mat);
+             blade.position.set(pos.x, height / 2, pos.z);
+             // Make it face the camera roughly (or use Sprites)
+             blade.rotation.y = Math.random() * Math.PI;
+             blade.userData = { type: 'tall_grass', resource: 'Tall Grass' };
+             scene.add(blade);
+             // Grass is not added to worldObjects for collision
+        }
+    }
+     console.log("Added placeholder tall grass");
+}
+
+function createScrapMetal() {
+    // Small objects scattered around
+    const scrapCount = 25;
+     for (let i = 0; i < scrapCount; i++) {
+         const pos = getRandomPosition();
+         const size = Math.random() * 0.1 + 0.05;
+         const geom = new THREE.BoxGeometry(size*2, size*0.5, size); // Flat-ish shape
+         const mat = new THREE.MeshStandardMaterial({ color: 0x777788, roughness: 0.6, metalness: 0.5 });
+         const scrap = new THREE.Mesh(geom, mat);
+         scrap.position.set(pos.x, size * 0.25, pos.z); // Lay flat on ground
+         scrap.rotation.y = Math.random() * Math.PI;
+         scrap.rotation.x = Math.random() * 0.2 - 0.1;
+         scrap.rotation.z = Math.random() * 0.2 - 0.1;
+         scrap.castShadow = true;
+         scrap.userData = { type: 'scrap_metal', resource: 'Scrap Metal' };
+         scene.add(scrap);
+         // Not collidable
+     }
+     console.log("Added placeholder scrap metal");
+}
+
+
+// --- Player Controls & Movement ---
+function onKeyDown(event) {
+    switch (event.code) {
+        case 'ArrowUp':
+        case 'KeyW': moveForward = true; break;
+        case 'ArrowLeft':
+        case 'KeyA': moveLeft = true; break;
+        case 'ArrowDown':
+        case 'KeyS': moveBackward = true; break;
+        case 'ArrowRight':
+        case 'KeyD': moveRight = true; break;
+        case 'Space': if (canJump) velocity.y += SETTINGS.jumpHeight; canJump = false; break;
+        case 'KeyE': handleInteraction(); break; // Interaction key
+        case 'Tab': event.preventDefault(); toggleInventory(); break; // Open/Close Inventory
+        case 'KeyC': toggleCrafting(); break; // Placeholder for crafting menu
+         // Quick Bar Selection (1-5)
+         case 'Digit1': setQuickBarSlot(0); break;
+         case 'Digit2': setQuickBarSlot(1); break;
+         case 'Digit3': setQuickBarSlot(2); break;
+         case 'Digit4': setQuickBarSlot(3); break;
+         case 'Digit5': setQuickBarSlot(4); break;
+    }
+}
+
+function onKeyUp(event) {
+    switch (event.code) {
+        case 'ArrowUp':
+        case 'KeyW': moveForward = false; break;
+        case 'ArrowLeft':
+        case 'KeyA': moveLeft = false; break;
+        case 'ArrowDown':
+        case 'KeyS': moveBackward = false; break;
+        case 'ArrowRight':
+        case 'KeyD': moveRight = false; break;
+    }
+}
+
+function onMouseMove(event) {
+    // Used by PointerLockControls internally
+    // Could be used for drag/drop in inventory if implemented
+}
+
+function onMouseClick(event) {
+     if (!controls.isLocked) return; // Only interact if pointer is locked
+
+    // Placeholder for primary action (e.g., attack with selected item)
+    const selectedItem = playerState.quickBar[playerState.selectedQuickSlot];
+    console.log(`Left Click - Selected: ${selectedItem ? selectedItem.item : 'None'}`);
+
+    if (selectedItem) {
+        // Example: Use Axe/Pickaxe
+        if (selectedItem.item === 'Axe' || selectedItem.item === 'Pickaxe') {
+            handleGathering(selectedItem.item);
+        }
+         // Example: Use Knife on Animal (requires raycast hit detection)
+         // if (selectedItem.item === 'Knife') { handleHunting(); }
+         // Example: Drink from Canteen
+         // if (selectedItem.item === 'Canteen') { drinkWater(); }
+    } else {
+        // Punch action?
+    }
+}
+
+
+// --- Game Loop ---
+function animate() {
+    requestAnimationFrame(animate);
+
+    const delta = clock.getDelta();
+
+    // Only update movement if pointer is locked and game is running
+    if (controls.isLocked === true && gameStarted) {
+        updatePlayerMovement(delta);
+        updateWorld(delta); // Update dynamic elements like animals
+    }
+
+    renderer.render(scene, camera);
+}
+
+// --- Update Functions ---
+function updatePlayerMovement(delta) {
+    velocity.x -= velocity.x * 10.0 * delta; // Air resistance / damping
+    velocity.z -= velocity.z * 10.0 * delta;
+
+    velocity.y -= SETTINGS.gravity * delta; // Gravity
+
+    direction.z = Number(moveForward) - Number(moveBackward);
+    direction.x = Number(moveRight) - Number(moveLeft);
+    direction.normalize(); // Ensures consistent speed in all directions
+
+    const currentSpeed = SETTINGS.playerSpeed; // Use the setting
+    if (moveForward || moveBackward) velocity.z -= direction.z * currentSpeed * delta;
+    if (moveLeft || moveRight) velocity.x -= direction.x * currentSpeed * delta;
+
+    // --- Collision Detection ---
+    const playerPos = controls.getObject().position;
+    const originalY = playerPos.y; // Store Y before vertical movement check
+
+    // Calculate potential horizontal movement
+    const moveX = velocity.x * delta;
+    const moveZ = velocity.z * delta;
+
+    // Check X collision
+    playerPos.x += moveX;
+    updatePlayerCollider();
+    if (checkCollision()) {
+        playerPos.x -= moveX; // Revert X movement
+        velocity.x = 0;       // Stop horizontal velocity in this direction
+    }
+
+     // Check Z collision
+     playerPos.z += moveZ;
+     updatePlayerCollider();
+     if (checkCollision()) {
+        playerPos.z -= moveZ; // Revert Z movement
+        velocity.z = 0;       // Stop horizontal velocity in this direction
+     }
+
+    // Apply vertical movement and check collision
+    playerPos.y += velocity.y * delta;
+    updatePlayerCollider();
+    if (checkCollision()) {
+        // Check if collision was from landing on something
+        if (velocity.y < 0) {
+            playerPos.y = getCollisionCeiling() + SETTINGS.playerHeight; // Place player exactly on top
+            velocity.y = 0;
+            canJump = true; // Allow jumping again
+        } else { // Hit head on something
+             playerPos.y = originalY; // Revert Y - simpler than calculating exact bottom
+             velocity.y = 0; // Stop upward movement
+        }
+    } else {
+        // If falling, ensure player doesn't go below absolute ground
+        if (playerPos.y < SETTINGS.playerHeight) {
+            velocity.y = 0;
+            playerPos.y = SETTINGS.playerHeight;
+            canJump = true;
+        }
+    }
+
+
+    // Apply the final calculated position changes via controls
+    // controls.moveRight(velocity.x * delta); // Doesn't work well with collision checks this way
+    // controls.moveForward(velocity.z * delta); // ^^^
+    // Instead, we directly manipulated playerPos which is controls.getObject().position
+
+    // Update the collider's position explicitly after all checks
+    updatePlayerCollider();
+}
+
+function updatePlayerCollider() {
+    const playerPos = controls.getObject().position;
+    const halfWidth = SETTINGS.playerRadius;
+    const height = SETTINGS.playerHeight;
+    playerCollider.set(
+        new THREE.Vector3(playerPos.x - halfWidth, playerPos.y - height, playerPos.z - halfWidth),
+        new THREE.Vector3(playerPos.x + halfWidth, playerPos.y, playerPos.z + halfWidth) // Top is at camera level
+    );
+     // Optional: Add a visual representation for debugging
+     // removeOldColliderHelper(); // Remove previous helper if exists
+     // const helper = new THREE.Box3Helper( playerCollider, 0xffff00 );
+     // scene.add( helper );
+     // currentColliderHelper = helper; // Store reference to remove later
+}
+// let currentColliderHelper = null; // Debugging
+// function removeOldColliderHelper() { if(currentColliderHelper) scene.remove(currentColliderHelper); } // Debugging
+
+
+function checkCollision() {
+    for (const obj of worldObjects) {
+        if (playerCollider.intersectsBox(obj.collider)) {
+            // console.log("Collision with:", obj.mesh.userData.type);
+            return true;
+        }
+    }
+    return false;
+}
+
+function getCollisionCeiling() {
+    let highestPoint = 0; // Assume ground level initially
+     for (const obj of worldObjects) {
+         if (playerCollider.intersectsBox(obj.collider)) {
+            // Find the highest point of the object the player is colliding with BELOW the player's feet
+            const objMaxY = obj.collider.max.y;
+            if (objMaxY <= playerCollider.min.y + 0.1 && objMaxY > highestPoint) { // Check slightly below feet
+                highestPoint = objMaxY;
+            }
+         }
+     }
+     return highestPoint;
+}
+
+
+function updateWorld(delta) {
+    // --- Animate Animals (VERY Simple Random Movement) ---
+    scene.children.forEach(child => {
+        if (child.userData.type === 'animal') {
+            // Basic random walk - replace with proper AI
+            if (!child.userData.targetPosition || child.position.distanceTo(child.userData.targetPosition) < 1.0) {
+                const range = SETTINGS.worldSize / 2 - 5;
+                child.userData.targetPosition = new THREE.Vector3(
+                    Math.random() * range * 2 - range,
+                    child.position.y, // Keep Y constant for now
+                    Math.random() * range * 2 - range
+                );
+                 // Make the animal "look" towards the target
+                 child.lookAt(child.userData.targetPosition);
+            }
+
+            const direction = new THREE.Vector3().subVectors(child.userData.targetPosition, child.position).normalize();
+            const speed = child.userData.speed || 0.5;
+            child.position.add(direction.multiplyScalar(speed * delta));
+
+            // TODO: Add collision checks for animals with world objects and each other
+        }
+    });
+
+    // --- Update Game State (Hunger, Thirst, etc.) ---
+    // playerState.hunger -= 0.01 * delta;
+    // playerState.thirst -= 0.02 * delta;
+    // Clamp values, check for death condition, etc.
+    // updateHUD(); // Update display if values change significantly
+}
+
+
+// --- Interaction & Gathering ---
+function handleInteraction() {
+    console.log("Trying to interact (E pressed)");
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2(0, 0); // Center of the screen
+    raycaster.setFromCamera(pointer, camera);
+
+    const intersects = raycaster.intersectObjects(scene.children, true); // Check all descendants
+
+    if (intersects.length > 0) {
+        let closestInteractable = null;
+        for (const intersect of intersects) {
+            if (intersect.distance > 3) continue; // Max interaction distance
+
+            let obj = intersect.object;
+            // Sometimes raycast hits parts of a combined object (like tree leaves), go up to find the main user data
+            while (obj && !obj.userData.type && obj.parent) {
+                obj = obj.parent;
+            }
+
+            if (obj.userData.type) {
+                console.log("Ray hit:", obj.userData.type, "at distance:", intersect.distance);
+                // Prioritize actionable items
+                if (['barrel', 'scrap_metal', 'tall_grass', 'water_source', 'building_container' /* Add later */].includes(obj.userData.type)) {
+                     closestInteractable = obj;
+                     break; // Found something directly interactable
+                 } else if (!closestInteractable && ['tree', 'rock', 'animal'].includes(obj.userData.type)) {
+                    closestInteractable = obj; // Keep track of resources, but prefer containers/pickups
+                 }
+            }
+        }
+
+
+        if (closestInteractable) {
+            const data = closestInteractable.userData;
+            console.log("Interacting with:", data.type);
+            switch (data.type) {
+                case 'barrel':
+                    searchContainer(closestInteractable);
+                    break;
+                case 'scrap_metal':
+                case 'tall_grass':
+                    pickupResource(closestInteractable);
+                    break;
+                case 'water_source':
+                    fillCanteen();
+                    break;
+                // case 'tree': // Handled by specific tool click (handleGathering)
+                // case 'rock': // Handled by specific tool click (handleGathering)
+                //     console.log(`This is a ${data.type}. Use the correct tool (Axe/Pickaxe) to gather.`);
+                //     break;
+                case 'animal':
+                     console.log(`This is an animal. Use a weapon to hunt.`);
+                     break;
+                 // Add cases for campfire, forge, crafting table interaction later
+                default:
+                    console.log("Cannot interact with:", data.type);
+            }
+        } else {
+            console.log("Nothing interactable in range.");
+        }
+    }
+}
+
+function handleGathering(toolType) {
+     console.log(`Trying to gather with: ${toolType}`);
+     const raycaster = new THREE.Raycaster();
+     const pointer = new THREE.Vector2(0, 0); // Center of the screen
+     raycaster.setFromCamera(pointer, camera);
+     const intersects = raycaster.intersectObjects(scene.children, true);
+
+     if (intersects.length > 0) {
+        let targetObject = null;
+         for (const intersect of intersects) {
+             if (intersect.distance > 3) continue; // Max gathering distance
+
+             let obj = intersect.object;
+              while (obj && !obj.userData.type && obj.parent) {
+                 obj = obj.parent;
+             }
+
+              if (obj && obj.userData.type) {
+                 // Check if the tool matches the resource type
+                 if (toolType === 'Axe' && obj.userData.type === 'tree') {
+                    targetObject = obj;
+                    break;
+                 }
+                 if (toolType === 'Pickaxe' && obj.userData.type === 'rock') {
+                     targetObject = obj;
+                     break;
+                 }
+                 // Add Knife for animals later if needed
+             }
+         }
+
+         if (targetObject) {
+             console.log(`Gathering ${targetObject.userData.resource} from ${targetObject.userData.type}`);
+             // Simple gathering: Add resource, remove object immediately
+             // TODO: Implement health/durability for resources
+             if (targetObject.userData.health) {
+                targetObject.userData.health -= 25; // Example damage
+                 console.log(`${targetObject.userData.type} health: ${targetObject.userData.health}`);
+                 if (targetObject.userData.health <= 0) {
+                    const resource = targetObject.userData.resource;
+                    const amount = Math.floor(Math.random() * 3) + 3; // 3-5 resources
+                    addItemToInventory(resource, amount);
+
+                    // Remove object from scene and collision checks
+                    scene.remove(targetObject);
+                    // If it had multiple parts (like tree), remove others too
+                    if(targetObject.userData.type === 'tree') {
+                        scene.children.forEach(child => {
+                            // Naive search for leaves at same X/Z, find better way later
+                            if(child.userData.type === 'tree_leaves' && Math.abs(child.position.x - targetObject.position.x) < 0.1 && Math.abs(child.position.z - targetObject.position.z) < 0.1) {
+                                scene.remove(child);
+                            }
+                        });
+                    }
+
+                    worldObjects = worldObjects.filter(wo => wo.mesh !== targetObject);
+                    console.log(`Collected ${amount} ${resource}. ${targetObject.userData.type} removed.`);
+                 } else {
+                     // Optional: Play a hit sound/effect
+                 }
+             }
+
+
+         } else {
+             console.log(`No suitable object found to use ${toolType} on.`);
+         }
+     }
+}
+
+function pickupResource(resourceObject) {
+    const resource = resourceObject.userData.resource;
+    const amount = 1; // Simple pickup is usually 1
+    console.log(`Picking up ${amount} ${resource}`);
+    if (addItemToInventory(resource, amount)) {
+        // Remove object from scene if successfully added
+        scene.remove(resourceObject);
+        // Note: These small pickups weren't added to worldObjects, so no need to filter
+    } else {
+        console.log("Inventory full, cannot pickup.");
+        // Optional: Display message to player
+    }
+}
+
+function searchContainer(containerObject) {
+     console.log("Searching container:", containerObject.userData.type);
+     // Basic loot: Add one random item from its table directly to inventory
+     // TODO: Implement a proper container UI
+     if (containerObject.userData.lootTable && containerObject.userData.lootTable.length > 0) {
+         const lootItem = containerObject.userData.lootTable[Math.floor(Math.random() * containerObject.userData.lootTable.length)];
+         const amount = 1; // Or randomize amount
+         console.log(`Found ${amount} ${lootItem}`);
+         if (addItemToInventory(lootItem, amount)) {
+             console.log("Added loot to inventory.");
+             // Make the container non-searchable after looting once (simple approach)
+             // Or remove some items from its loot table
+             containerObject.userData.searchable = false;
+             containerObject.userData.lootTable = []; // Empty it
+             // Optional: Change container appearance (e.g., open lid)
+         } else {
+             console.log("Inventory full, cannot take loot.");
+         }
+     } else {
+         console.log("Container is empty.");
+     }
+}
+
+function fillCanteen() {
+    const canteenIndex = findItemSlot('Canteen');
+    if (canteenIndex.area === null) {
+         console.log("You don't have a Canteen.");
+         return;
+    }
+
+     if (playerState.canteenWater !== 0) {
+        console.log("Canteen is not empty.");
+        return;
+     }
+
+     console.log("Filling Canteen with dirty water...");
+     playerState.canteenWater = 1; // 1 = dirty water
+     updateHUD(); // Reflect change if HUD shows canteen status
+     // TODO: Play sound effect
+}
+
+// --- Inventory & Crafting Logic (Placeholders) ---
+
+function addItemToInventory(itemName, quantity) {
+    if (!itemName || quantity <= 0) return false;
+
+    // 1. Try to stack in Quick Bar
+    for (let i = 0; i < playerState.quickBar.length; i++) {
+        if (playerState.quickBar[i] && playerState.quickBar[i].item === itemName) {
+            // Add stack logic here (check max stack size if implemented)
+            playerState.quickBar[i].quantity += quantity;
+            console.log(`Added ${quantity} ${itemName} to quick bar stack (slot ${i}). Total: ${playerState.quickBar[i].quantity}`);
+            updateQuickBarUI();
+            updateHUD(); // Update selected item display if needed
+            return true;
+        }
+    }
+
+    // 2. Try to stack in Inventory
+    for (let i = 0; i < playerState.inventory.length; i++) {
+        if (playerState.inventory[i] && playerState.inventory[i].item === itemName) {
+            playerState.inventory[i].quantity += quantity;
+             console.log(`Added ${quantity} ${itemName} to inventory stack (slot ${i}). Total: ${playerState.inventory[i].quantity}`);
+            updateInventoryUI();
+            return true;
+        }
+    }
+
+    // 3. Find empty slot in Quick Bar
+    for (let i = 0; i < playerState.quickBar.length; i++) {
+        if (!playerState.quickBar[i]) {
+            playerState.quickBar[i] = { item: itemName, quantity: quantity };
+            console.log(`Placed ${quantity} ${itemName} in empty quick bar slot ${i}.`);
+            updateQuickBarUI();
+             updateHUD(); // Update selected item display if needed
+            return true;
+        }
+    }
+
+    // 4. Find empty slot in Inventory
+    for (let i = 0; i < playerState.inventory.length; i++) {
+        if (!playerState.inventory[i]) {
+            playerState.inventory[i] = { item: itemName, quantity: quantity };
+            console.log(`Placed ${quantity} ${itemName} in empty inventory slot ${i}.`);
+            updateInventoryUI();
+            return true;
+        }
+    }
+
+    // 5. Inventory is full
+    console.log(`Inventory full. Could not add ${quantity} ${itemName}.`);
+    return false;
+}
+
+function removeItemFromInventory(itemName, quantity) {
+     let remainingToRemove = quantity;
+
+     // 1. Remove from Quick Bar
+     for (let i = 0; i < playerState.quickBar.length; i++) {
+         if (remainingToRemove <= 0) break;
+         if (playerState.quickBar[i] && playerState.quickBar[i].item === itemName) {
+             const canRemove = Math.min(remainingToRemove, playerState.quickBar[i].quantity);
+             playerState.quickBar[i].quantity -= canRemove;
+             remainingToRemove -= canRemove;
+             if (playerState.quickBar[i].quantity <= 0) {
+                 playerState.quickBar[i] = null; // Clear slot
+             }
+         }
+     }
+
+     // 2. Remove from Inventory
+     for (let i = 0; i < playerState.inventory.length; i++) {
+         if (remainingToRemove <= 0) break;
+         if (playerState.inventory[i] && playerState.inventory[i].item === itemName) {
+             const canRemove = Math.min(remainingToRemove, playerState.inventory[i].quantity);
+             playerState.inventory[i].quantity -= canRemove;
+             remainingToRemove -= canRemove;
+             if (playerState.inventory[i].quantity <= 0) {
+                 playerState.inventory[i] = null; // Clear slot
+             }
+         }
+     }
+
+     const removedSuccessfully = remainingToRemove <= 0;
+     if (removedSuccessfully) {
+        console.log(`Removed ${quantity} ${itemName}.`);
+        updateInventoryUI();
+        updateQuickBarUI();
+        updateHUD(); // Update selected item display if needed
+     } else {
+         console.warn(`Could not remove ${quantity} ${itemName}. Only found ${quantity - remainingToRemove}. State might be inconsistent.`);
+         // This case shouldn't happen if checkResources exists, but good for safety.
+     }
+     return removedSuccessfully;
+}
+
+function getTotalResourceCount(itemName) {
+    let total = 0;
+    playerState.quickBar.forEach(slot => {
+        if (slot && slot.item === itemName) total += slot.quantity;
+    });
+    playerState.inventory.forEach(slot => {
+        if (slot && slot.item === itemName) total += slot.quantity;
+    });
+    return total;
+}
+
+function checkResources(requirements) {
+    for (const req of requirements) {
+        if (getTotalResourceCount(req.item) < req.quantity) {
+            return false; // Not enough of this resource
+        }
+    }
+    return true; // Has enough of everything
+}
+
+// Called by HTML buttons
+window.craftItem = function(itemName) { // Make accessible globally
+    console.log(`Attempting to craft: ${itemName}`);
+    if (!craftingRecipes[itemName]) {
+        console.error(`Recipe not found for: ${itemName}`);
+        return;
+    }
+
+    const requirements = craftingRecipes[itemName];
+
+    if (checkResources(requirements)) {
+        console.log("Resources sufficient. Crafting...");
+        // Consume resources
+        let consumed = true;
+        requirements.forEach(req => {
+            if (!removeItemFromInventory(req.item, req.quantity)) {
+                consumed = false; // Should not happen if checkResources passed, but safety check
+            }
+        });
+
+        if (consumed) {
+            // Add crafted item
+            if (addItemToInventory(itemName, 1)) {
+                 console.log(`Successfully crafted ${itemName}.`);
+                 // Optionally close crafting menu or update UI
+            } else {
+                console.error(`Inventory full! Could not add crafted ${itemName}. Resources were still consumed.`);
+                 // TODO: Potentially drop item on ground or revert resource consumption
+            }
+        } else {
+            console.error("Failed to consume resources even after check. Crafting aborted.");
+            // This indicates a bug in removeItemFromInventory or checkResources logic
+        }
+
+    } else {
+        console.log("Insufficient resources to craft:", itemName);
+        // Display message to player
+        let message = "Need: ";
+         requirements.forEach(req => {
+             message += `${req.quantity} ${req.item} (Have: ${getTotalResourceCount(req.item)}), `;
+         });
+         alert(message.slice(0,-2)); // Show requirements in an alert for now
+    }
+}
+
+function addStartingItems() {
+    const itemsToAdd = playerState.startingItems[SETTINGS.startResources];
+    if (itemsToAdd) {
+        itemsToAdd.forEach(itemData => {
+            addItemToInventory(itemData.item, itemData.quantity);
+        });
+    }
+    updateInventoryUI();
+    updateQuickBarUI();
+}
+
+function findItemSlot(itemName) {
+    // Finds the first occurrence (quickbar then inventory)
+    for (let i = 0; i < playerState.quickBar.length; i++) {
+        if (playerState.quickBar[i] && playerState.quickBar[i].item === itemName) {
+            return { area: 'quickBar', index: i };
+        }
+    }
+     for (let i = 0; i < playerState.inventory.length; i++) {
+        if (playerState.inventory[i] && playerState.inventory[i].item === itemName) {
+            return { area: 'inventory', index: i };
+        }
+    }
+    return { area: null, index: -1 }; // Not found
+}
+
+
+// --- UI Management ---
+function toggleInventory() {
+    playerState.isInventoryOpen = !playerState.isInventoryOpen;
+    const inventoryScreen = document.getElementById('inventoryScreen');
+    inventoryScreen.style.display = playerState.isInventoryOpen ? 'block' : 'none';
+
+    if (playerState.isInventoryOpen) {
+        controls.unlock(); // Unlock mouse to interact with UI
+        updateInventoryUI(); // Refresh UI when opening
+    } else {
+        controls.lock(); // Lock mouse back to game
+    }
+}
+
+function toggleCrafting() {
+     // Basic toggle, assuming a 'craftingScreen' element exists
+     playerState.isCraftingOpen = !playerState.isCraftingOpen;
+     const craftingScreen = document.getElementById('craftingScreen');
+     craftingScreen.style.display = playerState.isCraftingOpen ? 'block' : 'none';
+
+     if (playerState.isCraftingOpen) {
+         controls.unlock();
+         // Update crafting UI if needed (e.g., show available recipes based on resources)
+         // updateCraftingUI();
+     } else {
+         controls.lock();
+     }
+ }
+
+function setupInventoryUI() {
+    const slotsContainer = document.getElementById('inventorySlots');
+    slotsContainer.innerHTML = ''; // Clear existing slots
+    for (let i = 0; i < SETTINGS.inventorySize; i++) {
+        const slot = document.createElement('div');
+        slot.classList.add('slot');
+        slot.dataset.index = i;
+        slot.dataset.area = 'inventory';
+        slot.innerHTML = `Inv ${i}`; // Placeholder text
+        slotsContainer.appendChild(slot);
+        // Add shift+click listener here later
+        // slot.addEventListener('click', (event) => handleSlotClick(event, 'inventory', i));
+    }
+}
+
+function updateInventoryUI() {
+    const slots = document.querySelectorAll('#inventorySlots .slot');
+    slots.forEach((slot, index) => {
+        const itemData = playerState.inventory[index];
+        if (itemData) {
+            slot.innerHTML = `${itemData.item.substring(0, 6)} <span class="quantity">${itemData.quantity}</span>`; // Abbreviate name
+             slot.title = `${itemData.item} (x${itemData.quantity})`; // Tooltip
+        } else {
+            slot.innerHTML = '';
+            slot.title = 'Empty';
+        }
+    });
+}
+
+function setupQuickBarUI() {
+    const quickBarContainer = document.getElementById('quickBar');
+    quickBarContainer.innerHTML = '';
+    for (let i = 0; i < SETTINGS.quickBarSize; i++) {
+        const slot = document.createElement('div');
+        slot.classList.add('slot');
+        slot.dataset.index = i;
+        slot.dataset.area = 'quickbar';
+        slot.innerHTML = `Q ${i+1}`; // Placeholder text
+        quickBarContainer.appendChild(slot);
+        // Add shift+click listener here later
+        // slot.addEventListener('click', (event) => handleSlotClick(event, 'quickbar', i));
+    }
+}
+
+function updateQuickBarUI() {
+    const slots = document.querySelectorAll('#quickBar .slot');
+    slots.forEach((slot, index) => {
+        const itemData = playerState.quickBar[index];
+        if (itemData) {
+             slot.innerHTML = `${itemData.item.substring(0, 6)} <span class="quantity">${itemData.quantity}</span>`;
+             slot.title = `${itemData.item} (x${itemData.quantity})`;
+        } else {
+            slot.innerHTML = '';
+            slot.title = 'Empty';
+        }
+        // Highlight selected slot
+        if (index === playerState.selectedQuickSlot) {
+            slot.style.borderColor = 'yellow';
+            slot.style.borderWidth = '2px';
+        } else {
+            slot.style.borderColor = '#888';
+            slot.style.borderWidth = '1px';
+        }
+    });
+}
+
+function setQuickBarSlot(index) {
+    if (index >= 0 && index < SETTINGS.quickBarSize) {
+        playerState.selectedQuickSlot = index;
+        console.log(`Selected quick slot: ${index + 1}`);
+        updateQuickBarUI(); // Re-render to show highlight
+        updateHUD(); // Update HUD with new selected item
+    }
+}
+
+function updateHUD() {
+     const hudElement = document.getElementById('hud');
+     if (!hudElement) return;
+
+     const selectedItem = playerState.quickBar[playerState.selectedQuickSlot];
+     const selectedText = selectedItem ? `${selectedItem.item} (x${selectedItem.quantity})` : '[None]';
+
+     // Add canteen status if player has one
+     let canteenStatus = '';
+     const canteenSlot = findItemSlot('Canteen');
+     if (canteenSlot.area !== null) {
+        switch(playerState.canteenWater) {
+            case 0: canteenStatus = ' (Empty)'; break;
+            case 1: canteenStatus = ' (Dirty)'; break;
+            case 2: canteenStatus = ' (Clean)'; break;
+        }
+     }
+
+
+     hudElement.innerHTML = `
+         <div>Health: ${playerState.health}</div>
+         <div>Hunger: ${playerState.hunger}</div>
+         <div>Thirst: ${playerState.thirst}</div>
+         <div>Selected: ${selectedText}${canteenStatus}</div>
+     `;
+}
+
+
+// --- Utility Functions ---
+function onWindowResize() {
+    if (!camera || !renderer) return; // Check if initialized
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// --- Cooking & Water Purification Stubs ---
+function cookMeat(campfireObject) {
+    console.log("Attempting to cook meat...");
+    // 1. Check if campfire is lit (needs state tracking)
+    // 2. Check if player has Raw Meat
+    // 3. Remove 1 Raw Meat
+    // 4. Start 30-second timer associated with the campfire
+    // 5. When timer finishes, add 1 Cooked Meat to campfire's "output" slot or player inv
+}
+
+function boilWater(campfireObject) {
+    console.log("Attempting to boil water...");
+     // 1. Check if campfire is lit
+     // 2. Check if player has a Canteen with Dirty Water (playerState.canteenWater === 1)
+     // 3. Start timer (e.g., 15 seconds)
+     // 4. When timer finishes, change canteen state: playerState.canteenWater = 2;
+     // 5. updateHUD();
+}
+
+// --- TODO / Future Expansion ---
+// - Implement Shift + Click item transfer
+// - Implement item dragging
+// - Implement proper container UI instead of direct looting
+// - Implement crafting table / forge interaction & UI
+// - Implement cooking/boiling timers and logic
+// - Implement resource node health/stages instead of instant removal
+// - Implement animal hunting (damage, dropping loot)
+// - Implement actual animated models (GLTF loading) and AnimationMixer
+// - Implement more robust collision/physics (e.g., using Cannon.js or Rapier.js)
+// - Implement saving/loading game state
+// - Add sound effects and music
+// - Refine AI for animals
+// - Add more items, resources, crafting recipes
+// - Add building system (placing structures)
+// - Add player stats effects (hunger/thirst drain, health regen/damage)
+// - Optimize rendering (InstancedMesh for trees/grass)

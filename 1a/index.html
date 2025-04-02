@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Survival Game Skeleton</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: flex; /* Use flexbox for centering */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column; /* Stack elements vertically */
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 20px;
+            text-align: center;
+            cursor: pointer;
+        }
+        #instructions {
+            width: 60%; /* Adjust width as needed */
+            padding: 20px;
+            background-color: rgba(50,50,50,0.8);
+            border-radius: 10px;
+        }
+        #settings {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: rgba(70,70,70,0.8);
+            border-radius: 8px;
+            font-size: 16px;
+        }
+         #settings label, #settings input, #settings select {
+            margin: 5px;
+         }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background-color: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* So it doesn't interfere with clicks */
+            display: none; /* Hidden until game starts */
+        }
+         #inventoryScreen, #craftingScreen {
+             position: absolute;
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+             width: 60%;
+             height: 70%;
+             background-color: rgba(40, 40, 40, 0.9);
+             border: 2px solid #666;
+             color: white;
+             padding: 20px;
+             display: none; /* Hidden by default */
+             font-family: Arial, sans-serif;
+             box-sizing: border-box;
+             z-index: 10; /* Make sure it's above blocker */
+         }
+        .slot {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #888;
+            background-color: #555;
+            margin: 2px;
+            display: inline-block; /* Or use flex/grid */
+            text-align: center;
+            line-height: 50px; /* Center text vertically */
+            font-size: 10px;
+            color: #eee;
+            position: relative; /* For quantity display */
+            user-select: none; /* Prevent text selection */
+        }
+        .slot .quantity {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 10px;
+            background-color: rgba(0,0,0,0.6);
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        #quickBar {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px;
+            border-radius: 5px;
+            display: none; /* Hidden until game starts */
+             z-index: 5;
+        }
+         #hud {
+             position: absolute;
+             top: 10px;
+             left: 10px;
+             color: white;
+             font-family: Arial, sans-serif;
+             text-shadow: 1px 1px 2px black;
+             display: none; /* Hidden until game starts */
+             z-index: 5;
+         }
+    </style>
+</head>
+<body>
+
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size: 36px">Click to Play</p>
+            <p>
+                Move: WASD<br/>
+                Jump: SPACE<br/>
+                Look: MOUSE<br/>
+                Interact/Gather: E (placeholder)<br/>
+                Open Inventory: TAB<br/>
+                Toggle Crafting: C (placeholder)<br/>
+                Shift + Click: Move items (placeholder)
+            </p>
+            <div id="settings">
+                <h3>Game Settings</h3>
+                <label for="startResources">Starting Resources:</label>
+                <select id="startResources">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                </select><br>
+                <label for="playerSpeed">Player Speed:</label>
+                <input type="range" id="playerSpeed" min="100" max="500" value="300"><br>
+                <label for="playerHeight">Player Height:</label>
+                <input type="range" id="playerHeight" min="1.5" max="2.5" step="0.1" value="1.8"><br>
+            </div>
+             <p id="threejs-check">Checking for Three.js...</p>
+        </div>
+    </div>
+
+    <div id="inventoryScreen">
+        <h2>Inventory</h2>
+        <div id="inventorySlots">
+            <!-- Slots will be generated by JS -->
+        </div>
+        <p>(Press TAB to close)</p>
+        <p>Shift + Left Click to move items between here and Quick Bar (Not Implemented)</p>
+    </div>
+
+    <div id="craftingScreen">
+        <h2>Crafting</h2>
+        <div id="craftingRecipes">
+            <!-- Recipes will be generated by JS -->
+            <button onclick="craftItem('Axe')">Craft Axe (3 Wood, 2 Stone)</button><br>
+            <button onclick="craftItem('Pickaxe')">Craft Pickaxe (2 Wood, 3 Stone)</button><br>
+            <button onclick="craftItem('Campfire')">Craft Campfire (5 Wood, 2 Stone)</button><br>
+            <!-- Add more buttons -->
+        </div>
+         <p>(Press C to close - Placeholder Key)</p>
+    </div>
+
+    <div id="quickBar">
+        <!-- Quick Bar Slots will be generated by JS -->
+    </div>
+
+     <div id="hud">
+         <div>Health: 100</div>
+         <div>Hunger: 100</div>
+         <div>Thirst: 100</div>
+         <div>Selected Item: [None]</div>
+     </div>
+
+    <div id="crosshair">+</div>
+
+    <!-- Load Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.159.0/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/controls/PointerLockControls.js"></script>
+    
+    <!-- Modified game.js will be loaded as a regular script, not as a module -->
+    <script src="game.js"></script>
+
+</body>
+</html>

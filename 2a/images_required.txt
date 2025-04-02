@@ -1,0 +1,21 @@
+Textures:
+
+terrain.jpg - A tileable terrain texture (1024x1024px or 2048x2048px)
+water.jpg - A tileable water texture (1024x1024px)
+item_icons.png - A sprite sheet for inventory items (256x256px with 8x8 grid of 32x32px icons)
+
+
+Models:
+
+The game uses GLTF/GLB models for 3D objects like trees, rocks, etc.
+These aren't images but 3D model files that should be placed in the assets/models/ directory
+
+
+UI Elements:
+
+While most UI elements are created with CSS, you might want to add custom UI textures (buttons, frames, etc.)
+These would typically be 64x64px to 256x256px depending on their purpose
+
+
+
+The most important image is the item_icons.png sprite sheet, which contains all the inventory icons. The code expects this to be a grid of 8x8 icons (64 total), each 32x32 pixels, for a total image size of 256x256 pixels. The items are referenced by their icon index in the items.js file, where each item has an "icon" property that corresponds to its position in the sprite sheet.

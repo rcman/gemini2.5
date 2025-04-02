@@ -1,0 +1,358 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #000;
+}
+
+#game-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Loading Screen */
+#loading-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #111;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+}
+
+.loading-container {
+    text-align: center;
+    width: 80%;
+    max-width: 500px;
+}
+
+.loading-container h1 {
+    margin-bottom: 30px;
+    font-size: 36px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: #333;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.progress {
+    width: 0%;
+    height: 100%;
+    background-color: #4CAF50;
+    transition: width 0.3s;
+}
+
+#loading-message {
+    font-size: 16px;
+    color: #ccc;
+}
+
+/* HUD */
+#hud {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+}
+
+.bar-container {
+    width: 200px;
+    height: 15px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
+    margin-bottom: 5px;
+    overflow: hidden;
+}
+
+.bar-label {
+    color: white;
+    font-size: 12px;
+    margin-bottom: 2px;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.bar-fill {
+    height: 100%;
+    width: 100%;
+    transition: width 0.3s;
+}
+
+#health-fill {
+    background-color: #e74c3c;
+}
+
+#hunger-fill {
+    background-color: #f39c12;
+}
+
+#thirst-fill {
+    background-color: #3498db;
+}
+
+#quick-bar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
+    padding: 5px;
+    pointer-events: auto;
+}
+
+.quick-slot {
+    width: 50px;
+    height: 50px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    margin: 0 2px;
+    border-radius: 3px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.quick-slot.selected {
+    border-color: white;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.item-count {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 10px;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+
+#action-text {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+/* Inventory Screen */
+#inventory-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.inventory-container {
+    background-color: #333;
+    border-radius: 10px;
+    padding: 20px;
+    width: 80%;
+    max-width: 800px;
+    color: white;
+}
+
+.inventory-container h2, .inventory-container h3 {
+    margin-bottom: 15px;
+    color: #ddd;
+}
+
+.inventory-grid, .quick-bar-grid, .crafting-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.quick-bar-grid {
+    grid-template-columns: repeat(8, 1fr);
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.inventory-slot, .crafting-item {
+    width: 60px;
+    height: 60px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.inventory-slot:hover, .crafting-item:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+}
+
+.crafting-item {
+    flex-direction: column;
+}
+
+.crafting-item-name {
+    font-size: 10px;
+    text-align: center;
+    margin-top: 5px;
+}
+
+.button-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.button-row button {
+    padding: 8px 15px;
+    background-color: #4CAF50;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.button-row button:hover {
+    background-color: #3e8e41;
+}
+
+/* Start Menu */
+#start-menu {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 200;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.menu-container {
+    background-color: #333;
+    border-radius: 10px;
+    padding: 30px;
+    width: 80%;
+    max-width: 500px;
+    color: white;
+    text-align: center;
+}
+
+.menu-container h1 {
+    margin-bottom: 30px;
+    font-size: 36px;
+}
+
+.settings {
+    text-align: left;
+    margin-bottom: 30px;
+}
+
+.setting {
+    margin-bottom: 15px;
+}
+
+.setting label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.setting select, .setting input {
+    width: 100%;
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+}
+
+#start-game {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+#start-game:hover {
+    background-color: #3e8e41;
+}
+
+/* Error Screen */
+#error-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 300;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.error-container {
+    background-color: #333;
+    border-radius: 10px;
+    padding: 30px;
+    width: 80%;
+    max-width: 500px;
+    color: white;
+    text-align: center;
+}
+
+.error-container h2 {
+    color: #e74c3c;
+    margin-bottom: 20px;
+}
+
+.error-container p {
+    margin-bottom: 20px;
+}
+
+.hidden {
+    display: none !important;
+}

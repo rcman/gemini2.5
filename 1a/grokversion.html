@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Survival Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #inventory { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            background: rgba(0, 0, 0, 0.7); 
+            color: white; 
+            padding: 10px; 
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+    <div id="inventory">
+        <h3>Inventory</h3>
+        <div id="quick-bar"></div>
+        <div id="items"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
+        // Check if Three.js is loaded
+        if (typeof THREE === 'undefined') {
+            alert('Three.js failed to load. Please check your internet connection or the script source.');
+            throw new Error('Three.js not loaded');
+        }
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Player setup
+        const player = {
+            height: 1.8,
+            speed: 0.1,
+            inventory: {
+                quickBar: ['axe', 'pickaxe', 'knife', 'canteen'],
+                items: []
+            },
+            resources: { wood: 0, stone: 0, grass: 0, metal: 0, meat: 0, leather: 0, fat: 0 }
+        };
+        camera.position.y = player.height;
+
+        // Controls
+        const controls = new (function() {
+            this.moveForward = false;
+            this.moveBackward = false;
+            this.moveLeft = false;
+            this.moveRight = false;
+
+            document.addEventListener('keydown', (e) => {
+                switch(e.key) {
+                    case 'w': this.moveForward = true; break;
+                    case 's': this.moveBackward = true; break;
+                    case 'a': this.moveLeft = true; break;
+                    case 'd': this.moveRight = true; break;
+                    case 'Tab': 
+                        e.preventDefault();
+                        document.getElementById('inventory').style.display = 'block'; 
+                        updateInventory();
+                        break;
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                switch(e.key) {
+                    case 'w': this.moveForward = false; break;
+                    case 's': this.moveBackward = false; break;
+                    case 'a': this.moveLeft = false; break;
+                    case 'd': this.moveRight = false; break;
+                    case 'Tab': document.getElementById('inventory').style.display = 'none'; break;
+                }
+            });
+        })();
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        const groundMaterial = new THREE.MeshBasicMaterial({ color: 0x228B22 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // Trees
+        function createTree(x, z) {
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.2, 0.2, 2, 32),
+                new THREE.MeshBasicMaterial({ color: 0x8B4513 })
+            );
+            trunk.position.set(x, 1, z);
+            const leaves = new THREE.Mesh(
+                new THREE.SphereGeometry(1, 32, 32),
+                new THREE.MeshBasicMaterial({ color: 0x006400 })
+            );
+            leaves.position.set(x, 2.5, z);
+            scene.add(trunk, leaves);
+            return { trunk, leaves };
+        }
+
+        // Rocks, Water, Animals, etc. (simplified)
+        const objects = [];
+        for (let i = 0; i < 10; i++) {
+            objects.push(createTree(Math.random() * 50 - 25, Math.random() * 50 - 25));
+        }
+
+        // Resource gathering
+        document.addEventListener('click', () => {
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(scene.children);
+            if (intersects.length > 0) {
+                const obj = intersects[0].object;
+                if (obj.geometry.type === 'CylinderGeometry' && player.inventory.quickBar.includes('axe')) {
+                    player.resources.wood += 5;
+                    scene.remove(obj.parent.trunk, obj.parent.leaves);
+                    updateInventory();
+                }
+            }
+        });
+
+        // Inventory update
+        function updateInventory() {
+            document.getElementById('quick-bar').innerHTML = 'Quick Bar: ' + player.inventory.quickBar.join(', ');
+            document.getElementById('items').innerHTML = 'Resources: ' + 
+                Object.entries(player.resources).map(([k, v]) => `${k}: ${v}`).join(', ');
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Movement
+            if (controls.moveForward) camera.position.z -= player.speed;
+            if (controls.moveBackward) camera.position.z += player.speed;
+            if (controls.moveLeft) camera.position.x -= player.speed;
+            if (controls.moveRight) camera.position.x += player.speed;
+
+            // Basic collision (simplified)
+            objects.forEach(obj => {
+                const distance = camera.position.distanceTo(obj.trunk.position);
+                if (distance < 1) {
+                    camera.position.x = obj.trunk.position.x + (camera.position.x > obj.trunk.position.x ? 1 : -1);
+                    camera.position.z = obj.trunk.position.z + (camera.position.z > obj.trunk.position.z ? 1 : -1);
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Resize handling
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

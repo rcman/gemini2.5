@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple 3D Survival FP Example</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: sans-serif;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* So it doesn't interfere with mouse clicks */
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        Resources: 0 <br>
+        WASD to move<br>
+        Click & Drag Mouse to look<br>
+        Click on cubes to collect
+    </div>
+    <div id="crosshair"></div>
+
+    <!-- Load Three.js using HTTP CDN (as requested) -->
+    <!-- Using a slightly older version known to have HTTP links readily available -->
+    <!-- Check console if this link breaks in the future -->
+    <script src="http://cdn.jsdelivr.net/npm/three@0.138.3/build/three.min.js"></script>
+
+    <script>
+        // --- Global Variables ---
+        let scene, camera, renderer;
+        let ground, playerCapsule; // Player representation (optional visual)
+        let resources = [];
+        let resourceCount = 0;
+
+        // Movement & Look
+        const moveSpeed = 5.0;
+        const lookSpeed = 0.003;
+        const keys = {
+            w: false, a: false, s: false, d: false
+        };
+        let isMouseDown = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let yaw = 0;   // Rotation around Y axis (left/right)
+        let pitch = 0; // Rotation around X axis (up/down)
+        const maxPitch = Math.PI / 2 - 0.1; // Limit vertical look
+        const minPitch = -Math.PI / 2 + 0.1;
+
+        // Timing
+        const clock = new THREE.Clock();
+
+        // --- Initialization ---
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            scene.fog = new THREE.Fog(0x87CEEB, 5, 50);
+
+            // Camera (Player's View)
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.7, 5); // Start position (x, y, z) - y is height
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Soft white light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 15, 10);
+            directionalLight.castShadow = true;
+            // Configure shadow properties for better quality
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.camera.left = -20;
+            directionalLight.shadow.camera.right = 20;
+            directionalLight.shadow.camera.top = 20;
+            directionalLight.shadow.camera.bottom = -20;
+
+            scene.add(directionalLight);
+            // Optional: visualize the light source
+            // scene.add(new THREE.CameraHelper(directionalLight.shadow.camera));
+
+
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22, side: THREE.DoubleSide }); // Forest green
+            ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2; // Rotate flat
+            ground.receiveShadow = true; // Allow ground to receive shadows
+            scene.add(ground);
+
+            // Simple Player Representation (Optional Visual - Capsule below camera)
+            // Helps visualize player position/collision slightly
+            // const capsuleGeom = new THREE.CapsuleGeometry(0.3, 1.0, 4, 8); // Radius, height
+            // const capsuleMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+            // playerCapsule = new THREE.Mesh(capsuleGeom, capsuleMat);
+            // playerCapsule.position.set(camera.position.x, camera.position.y - 0.85, camera.position.z); // Position below camera
+            // playerCapsule.castShadow = true;
+            // scene.add(playerCapsule);
+
+            // Resources (Cubes to collect)
+            const resourceGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            for (let i = 0; i < 20; i++) {
+                const resourceMaterial = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff });
+                const resource = new THREE.Mesh(resourceGeometry, resourceMaterial);
+
+                resource.position.x = (Math.random() - 0.5) * 40;
+                resource.position.z = (Math.random() - 0.5) * 40;
+                resource.position.y = 0.25; // Place slightly above ground
+                resource.castShadow = true;
+                resource.userData = { type: 'resource' }; // Identify object type
+
+                scene.add(resource);
+                resources.push(resource);
+            }
+
+            // Event Listeners
+            setupControls();
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        // --- Controls Setup ---
+        function setupControls() {
+            document.addEventListener('keydown', (event) => {
+                keys[event.key.toLowerCase()] = true;
+            });
+
+            document.addEventListener('keyup', (event) => {
+                keys[event.key.toLowerCase()] = false;
+            });
+
+            // Mouse Look (Click and Drag)
+            renderer.domElement.addEventListener('mousedown', (event) => {
+                isMouseDown = true;
+                previousMousePosition.x = event.clientX;
+                previousMousePosition.y = event.clientY;
+
+                // Check for resource collection on click
+                collectResource(event.clientX, event.clientY);
+            });
+
+            document.addEventListener('mouseup', () => { // Listen on document to catch mouseup outside canvas
+                isMouseDown = false;
+            });
+
+            document.addEventListener('mousemove', (event) => {
+                if (!isMouseDown) return;
+
+                const deltaX = event.clientX - previousMousePosition.x;
+                const deltaY = event.clientY - previousMousePosition.y;
+
+                yaw -= deltaX * lookSpeed;   // Rotate left/right (around Y)
+                pitch -= deltaY * lookSpeed; // Rotate up/down (around X)
+
+                // Clamp vertical rotation
+                pitch = Math.max(minPitch, Math.min(maxPitch, pitch));
+
+                previousMousePosition.x = event.clientX;
+                previousMousePosition.y = event.clientY;
+
+                // Apply rotation directly (Euler order matters for FPS style)
+                camera.rotation.order = 'YXZ'; // Yaw (Y), Pitch (X), Roll (Z) - Roll is usually 0
+                camera.rotation.y = yaw;
+                camera.rotation.x = pitch;
+            });
+        }
+
+        // --- Resource Collection (Raycasting) ---
+        function collectResource(mouseX, mouseY) {
+             // Convert mouse coordinates to normalized device coordinates (-1 to +1)
+            const mouseVector = new THREE.Vector2();
+            mouseVector.x = (mouseX / window.innerWidth) * 2 - 1;
+            mouseVector.y = -(mouseY / window.innerHeight) * 2 + 1;
+
+            // Raycasting
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouseVector, camera);
+
+            const intersects = raycaster.intersectObjects(resources); // Check only against resource objects
+
+            if (intersects.length > 0) {
+                const clickedObject = intersects[0].object;
+                const distance = intersects[0].distance;
+
+                // Only collect if close enough
+                if (distance < 3.0 && clickedObject.userData.type === 'resource') {
+                    scene.remove(clickedObject); // Remove from scene
+                    // Remove from resources array
+                    const index = resources.indexOf(clickedObject);
+                    if (index > -1) {
+                        resources.splice(index, 1);
+                    }
+                    resourceCount++;
+                    updateUI();
+                    console.log("Collected resource! Total:", resourceCount);
+                }
+            }
+        }
+
+
+        // --- Window Resize ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Update Player Movement ---
+        function updatePlayer(deltaTime) {
+            const currentSpeed = moveSpeed * deltaTime;
+            const moveDirection = new THREE.Vector3();
+
+            // Get forward/right directions based on current camera yaw
+            const forward = new THREE.Vector3(0, 0, -1);
+            forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw); // Apply yaw rotation
+
+            const right = new THREE.Vector3(1, 0, 0);
+            right.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw); // Apply yaw rotation
+
+
+            if (keys.w) moveDirection.add(forward);
+            if (keys.s) moveDirection.sub(forward);
+            if (keys.a) moveDirection.sub(right);
+            if (keys.d) moveDirection.add(right);
+
+            // Normalize diagonal movement and apply speed
+            if (moveDirection.lengthSq() > 0) { // Avoid NaN with zero vector
+                moveDirection.normalize().multiplyScalar(currentSpeed);
+                camera.position.add(moveDirection);
+            }
+
+             // Keep camera height fixed (simple collision with ground)
+            camera.position.y = 1.7;
+
+            // Update optional player capsule visual position
+            // if (playerCapsule) {
+            //    playerCapsule.position.set(camera.position.x, camera.position.y - 0.85, camera.position.z);
+            //    playerCapsule.rotation.y = yaw; // Match capsule rotation to camera yaw
+            // }
+        }
+
+        // --- Update UI ---
+        function updateUI() {
+            const infoElement = document.getElementById('info');
+            infoElement.innerHTML = `
+                Resources: ${resourceCount} <br>
+                WASD to move<br>
+                Click & Drag Mouse to look<br>
+                Click on cubes to collect
+            `;
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate); // Loop
+
+            const deltaTime = clock.getDelta(); // Time since last frame
+
+            updatePlayer(deltaTime);
+            // Add other game logic updates here (e.g., enemy movement, survival stats)
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Start the game ---
+        init();
+        animate();
+
+    </script>
+</body>
+</html>

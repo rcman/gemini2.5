@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple 3D Survival FP (file:// attempt)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #333; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: sans-serif;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+         #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            font-family: sans-serif;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer; /* Indicate it's clickable */
+            display: block; /* Initially visible */
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        Position: X: 0.00, Y: 0.00, Z: 0.00<br>
+        Controls: WASD to move, MOUSE to look, CLICK to lock mouse
+    </div>
+     <div id="instructions">
+        Click to Start
+    </div>
+
+    <!-- Attempt to load Three.js via HTTP from CDN (may be blocked by browser security on file://) -->
+    <script src="http://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+    <script>
+        // Check if THREE was loaded successfully
+        if (typeof THREE === 'undefined') {
+            document.body.innerHTML = `
+                <div style="color: white; font-family: sans-serif; padding: 20px; text-align: center;">
+                    <h1>Error</h1>
+                    <p>Failed to load the Three.js library.</p>
+                    <p>This often happens when running from <code>file://</code> due to browser security restrictions (CORS).</p>
+                    <p>Please try running this page using a simple local web server.</p>
+                    <p><a href="https://threejs.org/docs/#manual/en/introduction/Installation" target="_blank" rel="noopener noreferrer" style="color: #aaf;">Three.js Installation Guide (mentions local server)</a></p>
+                 </div>`;
+            // Stop script execution if THREE is not available
+             throw new Error("Three.js failed to load. See message on page.");
+        }
+
+
+        // --- The rest of the Three.js code is exactly the same as the previous answer ---
+        let scene, camera, renderer;
+        let clock;
+        let playerVelocity = new THREE.Vector3();
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+        const PLAYER_HEIGHT = 1.8; // Approximate height of player's eyes
+        const PLAYER_SPEED = 5.0; // Units per second
+        const MOUSE_SENSITIVITY = 0.002;
+
+        let euler = new THREE.Euler(0, 0, 0, 'YXZ'); // For mouse look rotation
+        let controlsLocked = false;
+
+        const instructionsElement = document.getElementById('instructions');
+        const infoElement = document.getElementById('info');
+
+        init();
+        animate();
+
+        function init() {
+            clock = new THREE.Clock();
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb); // Sky blue background
+            scene.fog = new THREE.Fog(0x87ceeb, 0, 75); // Add fog
+
+            // Camera (First-Person)
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, PLAYER_HEIGHT, 5); // Start position
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Soft ambient light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(15, 20, 10);
+            directionalLight.castShadow = true; // Enable shadow casting
+            // Configure shadow properties for better quality/performance
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.camera.left = -20;
+            directionalLight.shadow.camera.right = 20;
+            directionalLight.shadow.camera.top = 20;
+            directionalLight.shadow.camera.bottom = -20;
+
+            scene.add(directionalLight);
+            scene.add(directionalLight.target); // Needed for directional light targeting
+
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22, side: THREE.DoubleSide }); // Forest green
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+            ground.receiveShadow = true; // Allow ground to receive shadows
+            scene.add(ground);
+
+            // Some Obstacles (Cubes)
+            const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+            for (let i = 0; i < 20; i++) {
+                const cubeMaterial = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff });
+                const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                cube.position.set(
+                    (Math.random() - 0.5) * 50,
+                    0.5, // Position slightly above ground
+                    (Math.random() - 0.5) * 50
+                );
+                cube.castShadow = true; // Cubes cast shadows
+                cube.receiveShadow = true;
+                scene.add(cube);
+            }
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            document.addEventListener('keyup', onKeyUp, false);
+
+            // Pointer Lock API for mouse look
+            instructionsElement.addEventListener('click', () => {
+                // Only request pointer lock if THREE is loaded
+                 if (typeof THREE !== 'undefined' && renderer) {
+                     document.body.requestPointerLock();
+                 } else {
+                    console.warn("Cannot request pointer lock: Three.js or renderer not initialized.");
+                 }
+            }, false);
+
+            document.addEventListener('pointerlockchange', onPointerLockChange, false);
+            document.addEventListener('pointerlockerror', onPointerLockError, false);
+            document.addEventListener('mousemove', onMouseMove, false);
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer) return; // Check if initialized
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': case 'ArrowUp':    moveForward = true; break;
+                case 'KeyS': case 'ArrowDown':  moveBackward = true; break;
+                case 'KeyA': case 'ArrowLeft':  moveLeft = true; break;
+                case 'KeyD': case 'ArrowRight': moveRight = true; break;
+            }
+        }
+
+        function onKeyUp(event) {
+             switch (event.code) {
+                case 'KeyW': case 'ArrowUp':    moveForward = false; break;
+                case 'KeyS': case 'ArrowDown':  moveBackward = false; break;
+                case 'KeyA': case 'ArrowLeft':  moveLeft = false; break;
+                case 'KeyD': case 'ArrowRight': moveRight = false; break;
+            }
+        }
+
+        function onPointerLockChange() {
+            if (document.pointerLockElement === document.body) {
+                controlsLocked = true;
+                if(instructionsElement) instructionsElement.style.display = 'none';
+            } else {
+                controlsLocked = false;
+                 if(instructionsElement) instructionsElement.style.display = 'block';
+                moveForward = moveBackward = moveLeft = moveRight = false;
+            }
+        }
+
+        function onPointerLockError() {
+            console.error('Pointer Lock Error');
+             if(instructionsElement) {
+                 instructionsElement.textContent = 'Pointer Lock Failed!';
+                 instructionsElement.style.display = 'block';
+             }
+        }
+
+        function onMouseMove(event) {
+            if (!controlsLocked || !camera) return; // Check if locked and camera exists
+
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+            euler.y -= movementX * MOUSE_SENSITIVITY;
+            euler.x -= movementY * MOUSE_SENSITIVITY;
+            euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+            camera.quaternion.setFromEuler(euler);
+        }
+
+
+        function update(deltaTime) {
+            if (!camera) return;
+
+            const moveDirection = new THREE.Vector3();
+            if (moveForward) moveDirection.z -= 1;
+            if (moveBackward) moveDirection.z += 1;
+            if (moveLeft) moveDirection.x -= 1;
+            if (moveRight) moveDirection.x += 1;
+
+             if (moveDirection.lengthSq() > 0) {
+                const cameraDirection = new THREE.Vector3();
+                camera.getWorldDirection(cameraDirection);
+                cameraDirection.y = 0;
+                cameraDirection.normalize();
+
+                const rightDirection = new THREE.Vector3();
+                rightDirection.crossVectors(camera.up, cameraDirection).negate();
+
+                const finalMove = new THREE.Vector3();
+                finalMove.addScaledVector(cameraDirection, moveDirection.z);
+                finalMove.addScaledVector(rightDirection, moveDirection.x);
+                finalMove.normalize();
+
+                playerVelocity.copy(finalMove).multiplyScalar(PLAYER_SPEED * deltaTime);
+                camera.position.add(playerVelocity);
+
+             } else {
+                 playerVelocity.set(0,0,0);
+             }
+
+            camera.position.y = PLAYER_HEIGHT;
+
+             if (infoElement) {
+                infoElement.innerHTML = `
+                    Position: X: ${camera.position.x.toFixed(2)}, Y: ${camera.position.y.toFixed(2)}, Z: ${camera.position.z.toFixed(2)}<br>
+                    Controls: WASD move, MOUSE look, CLICK lock ${controlsLocked ? '(Locked)' : '(Click to Lock)'}
+                `;
+            }
+        }
+
+
+        function animate() {
+            // Only proceed if THREE is defined
+             if (typeof THREE === 'undefined') return;
+
+            requestAnimationFrame(animate);
+
+            const deltaTime = clock.getDelta();
+
+            update(deltaTime);
+
+             // Ensure renderer is initialized before rendering
+             if (renderer && scene && camera) {
+                 renderer.render(scene, camera);
+             }
+        }
+
+    </script>
+</body>
+</html>

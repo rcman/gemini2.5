@@ -94,9 +94,11 @@ World Features
 	
 	----------------------------------------------------
 	
-Write me an 3d first-person survival example in html5 and Three.js. 
+Write me an 3d first-person survival example in html5 and three_min.js. 
 
 for Three.js do not use HTTPS or Unpak when using links.
 
 I also do not want to run a local http server to run this game.
+
+I also do not want to use PointerLockCotrols.js
 

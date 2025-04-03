@@ -1,0 +1,102 @@
+
+
+
+write me an 3d first-person survival in html5 and the library three.js. I have three.js files local
+in this world with trees, rocks, water, animated animals, scrap metal, nails and tall grass. Barrels are searchable for additional loot. There are empty buildings with containers inside them which can also be search for loot. Trees, rocks, scrap metal, grass, and water and animals can be found on the map.  On the player pop-up build menu the player can craft these items: axe, pix axe, campfire, crafting table, and forge, rope. All items that are located in the quick bar and inventory are searched for resources when crafting an item. When an item is crafted it's automatically place in the first open quick-slots, if non are available then it's placed in the players inventory. The player can gather wood by havesting tree by chopping them with the axe and rocks from harvesting with the pix axe to get stones, gathering tall grass to make rope, scrap metal which can be used in the forge. Killing an animal the resources collected are meat, leather and fat. The player spawns with an axe, pic axe, knife and catien for holding water. when placing meat from an animal in a camp fire it takes about 30 seconds to cook each item. water needs to cooked in the cantien at a campfire to steralize the water for drinking. The player can craft a crafting table and forge. 
+
+I want an inventory to pop-up when I press the TAB key. I want to be able to move things from my inventory to my quick bar easily by holding the SHIFT key and lefy clikcing with my mouose will move items to and from my hot bar.  I want the game to start and ask how many resources I want in my inventory, also be able to adjust player speed and hight.  
+
+There should be live moving animals walking around the map. Inside the empty building there should be crates of searchable items that give you additional loot. 
+
+------------------------------------------------------------
+
+
+Write me an 3d first-person survival in html5 and Three.js. Make sure there are checks that Three.js
+
+Use this link for Three.js link http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+
+
+The game world includes trees, rocks, water, animated animals, scrap metal, nails, and tall grass. Barrels scattered throughout the map can be searched for additional loot, while empty buildings with doorways contain searchable containers with valuable resources. All tress, stones and buildings are collideable.
+
+Resource Gathering & Crafting
+
+    The player can gather materials from the environment:
+
+        Trees can be chopped with an axe to collect wood.
+
+        Rocks can be mined with a pick-axe to gather stones.
+
+        Tall grass can be harvested to craft rope.
+
+        Scrap metal can be collected and later refined in a forge.
+
+        Animals provide meat, leather, and fat when hunted.
+
+    The player's crafting menu allows crafting of:
+
+        Axe
+
+        Pick-axe
+
+        Campfire
+
+        Crafting table
+
+        Forge
+
+        Rope
+
+    Crafting System:
+
+        When crafting, resources are automatically pulled from both the quick bar and inventory.
+
+        Crafted items are placed in the first available quick-slot; if no slots are open, they are sent to the player’s inventory.
+
+    Cooking & Water Purification:
+
+        Placing raw meat on a campfire takes 30 seconds per piece to cook.
+
+        Water must be boiled in a canteen over a campfire to make it safe for drinking.
+
+Player Inventory & Controls
+
+    The player starts with:
+
+        Axe
+
+        Pick-axe
+
+        Knife
+
+        Canteen for holding water
+
+    Inventory Management:
+
+        Pressing TAB opens the inventory.
+
+        Holding SHIFT and left-clicking moves items between the inventory and quick bar.
+
+Game Settings & Adjustments
+
+    At the start of the game, players can:
+
+        Select how many resources they want in their inventory.
+
+        Adjust player speed and height.
+
+World Features
+
+    Dynamic Wildlife: Animals move and roam around the map in real time.
+
+    Searchable Loot: Crates inside empty buildings contain valuable loot.
+	
+	
+	
+	----------------------------------------------------
+	
+Write me an 3d first-person survival example in html5 and Three.js. 
+
+for Three.js do not use HTTPS or Unpak when using links.
+
+I also do not want to run a local http server to run this game.
+

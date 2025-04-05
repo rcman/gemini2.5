@@ -1,0 +1,169 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    width: 100%;
+    height: 100%;
+    font-family: sans-serif;
+    color: white; /* Default text color for UI */
+}
+
+#renderCanvas {
+    width: 100%;
+    height: 100%;
+    display: block; /* Prevent potential extra space */
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1; /* Behind UI */
+}
+
+#uiContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2; /* In front of canvas */
+    pointer-events: none; /* Allow clicks to pass through to canvas by default */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Pushes quickbar down */
+    align-items: center; /* Centers horizontally */
+}
+
+/* --- Quick Bar --- */
+#quickBar {
+    display: flex;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px;
+    border-radius: 5px;
+    margin-bottom: 20px; /* Space from bottom edge */
+    pointer-events: all; /* Allow clicks on quickbar */
+}
+
+.slot {
+    width: 50px;
+    height: 50px;
+    border: 1px solid #555;
+    background-color: rgba(255, 255, 255, 0.1);
+    margin: 2px;
+    display: flex; /* For item image/count */
+    align-items: center;
+    justify-content: center;
+    position: relative; /* For item count */
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+.slot .item-count {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 0.8em;
+    background-color: rgba(0,0,0,0.7);
+    padding: 1px 3px;
+    border-radius: 2px;
+}
+
+
+/* --- Inventory Panel --- */
+#inventoryPanel, #craftingMenu, #lootContainer {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    border: 2px solid #444;
+    border-radius: 10px;
+    padding: 20px;
+    width: 400px; /* Adjust as needed */
+    z-index: 3;
+    pointer-events: all; /* Can interact with this panel */
+    text-align: center;
+}
+
+#inventoryPanel h2, #craftingMenu h2, #lootContainer h2 {
+    margin-top: 0;
+    color: #eee;
+}
+
+#inventoryGrid, #lootGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); /* Responsive grid */
+    gap: 5px;
+    margin-bottom: 15px;
+    max-height: 300px; /* Limit height and allow scrolling if needed */
+    overflow-y: auto;
+}
+
+#inventoryPanel button, #craftingMenu button, #lootContainer button {
+    padding: 8px 15px;
+    cursor: pointer;
+}
+
+/* --- Crafting Menu --- */
+#craftingList {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 15px;
+    text-align: left;
+    max-height: 300px;
+    overflow-y: auto;
+}
+#craftingList li {
+    padding: 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    margin-bottom: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+#craftingList li:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+#craftingList li.can-craft {
+    color: lightgreen;
+}
+#craftingList li.cannot-craft {
+    color: #aaa;
+    cursor: not-allowed;
+}
+
+/* --- Interaction Prompt --- */
+#interactionPrompt {
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px 15px;
+    border-radius: 5px;
+    position: absolute; /* Position near center or as needed */
+    top: 60%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* --- Message Log --- */
+#messageLog {
+    position: absolute;
+    bottom: 80px; /* Above quick bar */
+    left: 20px;
+    max-width: 300px;
+    pointer-events: none;
+}
+#messageLog div {
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 5px 8px;
+    margin-top: 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+    opacity: 1;
+    transition: opacity 0.5s ease-out 2s; /* Fade out after 2 seconds */
+}
+#messageLog div.fade-out {
+    opacity: 0;
+}
+
+
+/* --- Utility --- */
+.hidden {
+    display: none !important; /* Use !important to override other styles if necessary */
+}

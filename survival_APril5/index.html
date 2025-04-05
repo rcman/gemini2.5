@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <!-- UI Elements -->
+    <div id="inventory-ui" class="hidden">
+        <h2>Inventory</h2>
+        <ul id="inventory-list">
+            <!-- Items will be listed here by JS -->
+        </ul>
+        <p>Press 'I' to close</p>
+    </div>
+
+    <div id="crosshair">+</div>
+    <div id="info-text"></div> <!-- For messages like "Gathered Wood" -->
+
+    <!-- Libraries -->
+    <script src="js/libs/three.min.js"></script>
+    <!-- If using OrbitControls or other addons, include them here -->
+
+    <!-- Game Scripts (Order matters!) -->
+    <script type="module" src="js/itemSystem.js"></script>
+    <script type="module" src="js/inventory.js"></script>
+    <script type="module" src="js/crafting.js"></script>
+    <script type="module" src="js/ui.js"></script>
+    <script type="module" src="js/player.js"></script>
+    <script type="module" src="js/world.js"></script>
+    <script type="module" src="js/sceneSetup.js"></script>
+    <script type="module" src="js/inputHandler.js"></script>
+    <script type="module" src="js/main.js"></script>
+
+</body>
+</html>

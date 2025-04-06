@@ -1,0 +1,1544 @@
+// Ensure Babylon.js and loaders/GUI are loaded before this script in index.html
+
+// Get the canvas element
+const canvas = document.getElementById('renderCanvas');
+// Get UI elements
+const uiContainer = document.getElementById('uiContainer');
+const inventoryPanel = document.getElementById('inventoryPanel');
+const inventoryGrid = document.getElementById('inventoryGrid');
+const closeInventoryBtn = document.getElementById('closeInventoryBtn');
+const quickBarSlots = document.querySelectorAll('#quickBar .slot');
+const interactionPrompt = document.getElementById('interactionPrompt');
+const craftingMenu = document.getElementById('craftingMenu');
+const craftingList = document.getElementById('craftingList');
+const closeCraftingBtn = document.getElementById('closeCraftingBtn');
+const lootContainer = document.getElementById('lootContainer');
+const lootGrid = document.getElementById('lootGrid');
+const closeLootBtn = document.getElementById('closeLootBtn');
+const messageLog = document.getElementById('messageLog');
+
+
+// --- Babylon.js Engine Setup ---
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+let scene; // Global scene object
+
+// --- Game State ---
+let player = null;
+let playerInventory = []; // Array to hold inventory items { id: 'wood', name: 'Wood', quantity: 10, icon: 'path/to/wood.png' }
+let quickBar = new Array(5).fill(null); // Fixed size quick bar
+let activeQuickBarIndex = 0; // Track the active slot
+let isInventoryOpen = false;
+let isCraftingOpen = false;
+let isLootOpen = false;
+const PLAYER_REACH = 5; // How far the player can interact
+let highlightedMesh = null; // Mesh the player is looking at
+let currentLootSource = null; // Reference to the barrel/container being looted
+const inputMap = {}; // Stores current key states
+const MAX_INVENTORY_SLOTS = 20;
+
+
+// --- Item & Crafting Definitions ---
+// IMPORTANT: Replace 'assets/icons/...' and 'assets/models/...' with actual paths
+const items = {
+    'wood': { name: 'Wood', stackable: true, icon: 'icons/wood.png' },
+    'stone': { name: 'Stone', stackable: true, icon: 'icons/stone.png' },
+    'scrap_metal': { name: 'Scrap Metal', stackable: true, icon: 'icons/scrap.png' },
+    'nails': { name: 'Nails', stackable: true, icon: 'icons/nails.png' },
+    'grass': { name: 'Grass', stackable: true, icon: 'icons/grass.png' },
+    'rope': { name: 'Rope', stackable: true, icon: 'icons/rope.png' },
+    'raw_meat': { name: 'Raw Meat', stackable: true, icon: 'icons/raw_meat.png' },
+    'cooked_meat': { name: 'Cooked Meat', stackable: true, icon: 'icons/cooked_meat.png' },
+    'leather': { name: 'Leather', stackable: true, icon: 'icons/leather.png' },
+    'fat': { name: 'Animal Fat', stackable: true, icon: 'icons/fat.png' },
+    'water_dirty': { name: 'Dirty Water', stackable: false, icon: 'icons/water_dirty.png' }, // Can only be in canteen
+    'water_clean': { name: 'Clean Water', stackable: false, icon: 'icons/water_clean.png' }, // Can only be in canteen
+    'axe': { name: 'Axe', stackable: false, placeable: false, tool: 'axe', icon: 'icons/axe.png' },
+    'pickaxe': { name: 'Pickaxe', stackable: false, placeable: false, tool: 'pickaxe', icon: 'icons/pickaxe.png' },
+    'knife': { name: 'Knife', stackable: false, placeable: false, tool: 'knife', icon: 'icons/knife.png' },
+    'canteen': { name: 'Canteen', stackable: false, placeable: false, icon: 'icons/canteen.png', contains: null, capacity: 1 }, // Special item
+    'campfire': { name: 'Campfire', stackable: true, placeable: true, icon: 'icons/campfire.png', model: 'campfire.glb' }, // NOTE: Uses simple stacking for now. Model path relative to assets/models/
+    'crafting_table': { name: 'Crafting Table', stackable: true, placeable: true, icon: 'icons/crafting_table.png', model: 'crafting_table.glb' },
+    'forge': { name: 'Forge', stackable: true, placeable: true, icon: 'icons/forge.png', model: 'forge.glb' },
+    'metal_ingot': { name: 'Metal Ingot', stackable: true, icon: 'icons/ingot.png' },
+    // Add more items...
+};
+
+const recipes = {
+    'rope': { requires: { 'grass': 4 }, creates: { id: 'rope', quantity: 1 } },
+    'axe': { requires: { 'wood': 5, 'stone': 3 }, creates: { id: 'axe', quantity: 1 } },
+    'pickaxe': { requires: { 'wood': 5, 'stone': 3 }, creates: { id: 'pickaxe', quantity: 1 } },
+    'campfire': { requires: { 'wood': 8, 'stone': 4 }, creates: { id: 'campfire', quantity: 1 } },
+    'crafting_table': { requires: { 'wood': 10, 'nails': 4 }, creates: { id: 'crafting_table', quantity: 1 } },
+    'forge': { requires: { 'stone': 20, 'wood': 5 }, creates: { id: 'forge', quantity: 1 } },
+    // Add more recipes...
+    // 'metal_ingot': { requires: {'scrap_metal': 5, /* fuel? */}, creates: {id: 'metal_ingot', quantity: 1}, station: 'forge'} // Example requiring forge
+};
+
+
+// --- Function to Create the Scene ---
+async function createScene() {
+    scene = new BABYLON.Scene(engine);
+    scene.collisionsEnabled = true;
+    scene.gravity = new BABYLON.Vector3(0, -9.81 / 60, 0); // Apply gravity per frame (adjust divisor if needed)
+    scene.workerCollisions = true; // Use worker thread for collisions (if available)
+
+    // Optional: Add fog
+    // scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+    // scene.fogDensity = 0.008;
+    // scene.fogColor = new BABYLON.Color3(0.7, 0.8, 0.9);
+
+    // Camera - UniversalCamera for 3rd person control
+    const camera = new BABYLON.UniversalCamera("playerCamera", new BABYLON.Vector3(0, 5, -10), scene);
+    camera.setTarget(BABYLON.Vector3.Zero()); // Initial target
+    camera.attachControl(canvas, true); // Attach controls for mouse look ONLY when pointer locked
+    camera.speed = 0; // We control player capsule movement directly, not camera speed
+    camera.inputs.remove(camera.inputs.attached.keyboard); // Remove default WASD camera input
+    camera.minZ = 0.1; // Prevent clipping through nearby objects
+
+    // --- Lighting ---
+    // Ambient light (fills in non-shadowed areas)
+    const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0.1, 1, 0.1), scene);
+    ambientLight.intensity = 0.4;
+    ambientLight.groundColor = new BABYLON.Color3(0.4, 0.4, 0.5);
+
+    // Main directional light (casts shadows)
+    const shadowLight = new BABYLON.DirectionalLight("shadowLight", new BABYLON.Vector3(-0.6, -0.8, -0.4), scene);
+    shadowLight.intensity = 0.6;
+    shadowLight.position = new BABYLON.Vector3(50, 100, 50); // Position helps define shadow area
+
+    // Shadow Generator
+    const shadowGenerator = new BABYLON.ShadowGenerator(1024, shadowLight);
+    shadowGenerator.useBlurExponentialShadowMap = true;
+    shadowGenerator.blurKernel = 32;
+    shadowGenerator.darkness = 0.5;
+    shadowGenerator.bias = 0.005; // Adjust as needed to prevent shadow artifacts
+    // shadowGenerator.forceBackFacesOnly = true; // Optimization if models are well-formed
+
+    // Define shadow casting range
+    shadowLight.shadowMinZ = 1;
+    shadowLight.shadowMaxZ = 200; // Adjust based on view distance/world size
+
+
+    // --- Player Setup ---
+    // *** Replace with actual player model loading ***
+    player = BABYLON.MeshBuilder.CreateCapsule("player", { height: 1.8, radius: 0.4, subdivisions: 6 }, scene);
+    player.position = new BABYLON.Vector3(0, 5, 0); // Start slightly higher to fall into place
+    player.checkCollisions = true;
+    player.ellipsoid = new BABYLON.Vector3(0.4, 0.9, 0.4); // Collision volume
+    player.ellipsoidOffset = new BABYLON.Vector3(0, 0.9, 0); // Center the ellipsoid
+    player.speed = 4.5; // Player movement speed (units per second)
+    player.applyGravity = true; // Use scene's gravity
+    player.rotationQuaternion = BABYLON.Quaternion.Identity(); // Use quaternions for rotations
+
+    // Make player mesh invisible (replace with actual model later)
+    player.visibility = 0.0;
+
+    // Attach camera to player capsule (simple attachment - for model, attach to head bone)
+    camera.parent = player;
+    camera.position = new BABYLON.Vector3(0, 1.6, -3.5); // Offset behind and slightly above player origin
+    camera.lockedTarget = new BABYLON.Vector3(0, 1.0, 0); // Point camera slightly lower than head height
+
+    // Player data links
+    player.inventory = playerInventory;
+    player.quickBar = quickBar;
+
+    // Add player capsule to shadow casters (optional, if visible model used)
+    // shadowGenerator.addShadowCaster(player);
+
+
+    // --- Ground ---
+    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 200, height: 200 }, scene);
+    ground.checkCollisions = true;
+    ground.receiveShadows = true; // Allow shadows on the ground
+    // Apply ground texture
+    const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+    try {
+        groundMat.diffuseTexture = new BABYLON.Texture("icons/grass.png", scene);
+        groundMat.diffuseTexture.uScale = 15;
+        groundMat.diffuseTexture.vScale = 15;
+        groundMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+        groundMat.useLogarithmicDepth = true; // Can help with z-fighting at distance
+    } catch (e) { console.warn("Ground texture not found"); }
+    ground.material = groundMat;
+
+
+    // --- World Objects (Placeholders - Replace with Asset Loading & Random Placement) ---
+    // Trees
+    const treeMat = new BABYLON.StandardMaterial(`treeMat`, scene); // Create material once
+    treeMat.diffuseColor = new BABYLON.Color3(0.4, 0.25, 0.15);
+    for (let i = 0; i < 40; i++) {
+        // *** Replace with Tree model loading and instancing ***
+        const treeHeight = 8 + Math.random() * 4;
+        const tree = BABYLON.MeshBuilder.CreateCylinder(`tree_${i}`, { height: treeHeight, diameterTop: 0.2 + Math.random() * 0.5, diameterBottom: 1 + Math.random(), tessellation: 8 }, scene);
+        tree.position = new BABYLON.Vector3((Math.random() - 0.5) * 180, treeHeight / 2, (Math.random() - 0.5) * 180);
+        tree.checkCollisions = true;
+        tree.metadata = { type: "resource", resourceId: "wood", health: 100, tool: "axe" };
+        tree.material = treeMat;
+        shadowGenerator.addShadowCaster(tree);
+    }
+
+    // Rocks
+    const rockMat = new BABYLON.StandardMaterial(`rockMat`, scene); // Create material once
+    rockMat.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+    for (let i = 0; i < 50; i++) {
+        // *** Replace with Rock model loading and instancing ***
+        const rockDiameter = 1 + Math.random() * 2;
+        const rock = BABYLON.MeshBuilder.CreateSphere(`rock_${i}`, { diameter: rockDiameter, segments: 6 }, scene);
+        rock.position = new BABYLON.Vector3((Math.random() - 0.5) * 180, rockDiameter / 2, (Math.random() - 0.5) * 180);
+        rock.checkCollisions = true;
+        rock.metadata = { type: "resource", resourceId: "stone", health: 80, tool: "pickaxe" };
+        rock.material = rockMat;
+        rock.receiveShadows = true; // Rocks can receive shadows
+        shadowGenerator.addShadowCaster(rock);
+    }
+
+    // Barrels (Lootable)
+    const barrelMat = new BABYLON.StandardMaterial(`barrelMat`, scene); // Create material once
+    barrelMat.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
+    for (let i = 0; i < 15; i++) {
+         // *** Replace with Barrel model loading ***
+        const barrel = BABYLON.MeshBuilder.CreateCylinder(`barrel_${i}`, { height: 1.2, diameter: 0.8, tessellation: 12 }, scene);
+        barrel.position = new BABYLON.Vector3((Math.random() - 0.5) * 150, 0.6, (Math.random() - 0.5) * 150);
+        barrel.checkCollisions = true;
+        barrel.metadata = { type: "lootable", lootTable: ["scrap_metal", "nails", "rope", "fat", "canteen"] }; // Example loot pool
+        barrel.material = barrelMat;
+        barrel.receiveShadows = true;
+        shadowGenerator.addShadowCaster(barrel);
+    }
+
+    // Building Placeholder
+     // *** Replace with actual Building model loading, including interior and doorways ***
+    const building = BABYLON.MeshBuilder.CreateBox("building", {width: 8, height: 4, depth: 6}, scene);
+    building.position = new BABYLON.Vector3(-15, 2, -10);
+    building.checkCollisions = true;
+    building.metadata = { type: "building" }; // Could contain lootable containers inside later
+    building.receiveShadows = true;
+    shadowGenerator.addShadowCaster(building);
+    // Simple material for placeholder building
+    const buildMat = new BABYLON.StandardMaterial(`buildMat`, scene);
+    buildMat.diffuseColor = new BABYLON.Color3(0.8, 0.75, 0.7);
+    building.material = buildMat;
+
+
+    // Scrap Metal Pickup (Example)
+    // *** Replace with Scrap model loading ***
+    const scrapMat = new BABYLON.StandardMaterial(`scrapMat`, scene);
+    scrapMat.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.7);
+    scrapMat.backFaceCulling = false; // See both sides of the plane
+    for (let i=0; i<10; ++i) {
+        const scrap = BABYLON.MeshBuilder.CreatePlane(`scrap_${i}`, {size: 0.5}, scene);
+        scrap.position = new BABYLON.Vector3((Math.random() - 0.5) * 50, 0.1, (Math.random() - 0.5) * 50); // Random positions
+        scrap.rotation.x = Math.PI / 2;
+        scrap.metadata = { type: "pickup", itemId: "scrap_metal", quantity: Math.floor(Math.random() * 3) + 1 };
+        scrap.material = scrapMat;
+        // Small items might not need shadows
+        // shadowGenerator.addShadowCaster(scrap);
+    }
+
+    // Tall Grass (Visual only placeholder - Use billboards or instanced planes with texture)
+    // ... implementation requires more detail ...
+
+    // Water Plane (Needs better material like WaterMaterial for proper look)
+    const water = BABYLON.MeshBuilder.CreateGround("water", {width: 80, height: 80}, scene);
+    water.position = new BABYLON.Vector3(60, -0.1, 60); // Slightly below ground
+    const waterMat = new BABYLON.StandardMaterial("waterMat", scene);
+    waterMat.diffuseColor = new BABYLON.Color3(0.2, 0.4, 0.8);
+    waterMat.alpha = 0.6; // Transparency
+    // waterMat.specularPower = 16; // Add some shine
+    // waterMat.useLogarithmicDepth = true;
+    water.material = waterMat;
+    water.metadata = { type: "water" };
+    // Water generally doesn't cast shadows well and might not need collisions
+    // water.checkCollisions = true;
+
+
+    // --- Animated Animals (Complex - Placeholder Logic) ---
+    // *** Requires loading animated models and implementing AI ***
+    /*
+    try {
+        const animalResult = await BABYLON.SceneLoader.ImportMeshAsync("", "assets/models/", "animated_deer.glb", scene);
+        const deer = animalResult.meshes[0];
+        deer.position = new BABYLON.Vector3(15, 0, 15);
+        deer.metadata = {
+             type: "animal", species: "deer", health: 50, isDead: false,
+             drops: { 'raw_meat': 3, 'leather': 2, 'fat': 1 },
+             state: 'idle', // For AI
+             // Add reference to animation groups if loaded
+        };
+        shadowGenerator.addShadowCaster(deer); // Animals should cast shadows
+        deer.receiveShadows = true;
+        // Start idle animation etc.
+    } catch (e) { console.warn("Could not load animal model"); }
+    */
+
+
+    // --- Initialize Player Gear ---
+    addItemToInventory('axe', 1);
+    addItemToInventory('pickaxe', 1);
+    addItemToInventory('knife', 1);
+    addItemToInventory('canteen', 1);
+    const canteenItem = findInventoryItem('canteen');
+    if (canteenItem) { canteenItem.item.contains = { id: 'water_dirty', quantity: 1 }; }
+    // Move first 4 items to quickbar
+    moveItem('inventory', 0); // Axe to QB 0
+    moveItem('inventory', 0); // Pickaxe to QB 1
+    moveItem('inventory', 0); // Knife to QB 2
+    moveItem('inventory', 0); // Canteen to QB 3
+
+
+    // --- Initial UI Update ---
+    updateInventoryUI();
+    updateQuickBarUI();
+    updateCraftingUI();
+
+
+    // --- Input Handling Setup ---
+    scene.actionManager = new BABYLON.ActionManager(scene);
+    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyDownTrigger, (evt) => {
+        inputMap[evt.sourceEvent.key.toLowerCase()] = true;
+        handleKeyPress(evt.sourceEvent.key.toLowerCase()); // Handle single presses for UI toggles etc.
+    }));
+    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyUpTrigger, (evt) => {
+        inputMap[evt.sourceEvent.key.toLowerCase()] = false;
+    }));
+    // --- End Input Handling Setup ---
+
+    // --- Pointer Lock for Mouse Look ---
+    const pointerLockChange = () => {
+        const controlEnabled = document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement;
+        if (!controlEnabled) {
+            camera.detachControl(canvas); // Detach mouse controls when unlocked
+        } else {
+            camera.attachControl(canvas); // Re-attach mouse controls when locked
+        }
+    };
+    document.addEventListener("pointerlockchange", pointerLockChange, false);
+    document.addEventListener("mozpointerlockchange", pointerLockChange, false);
+    document.addEventListener("webkitpointerlockchange", pointerLockChange, false);
+
+    scene.onPointerDown = (evt) => {
+        // Lock pointer on left click when UI is closed
+        if (!isInventoryOpen && !isCraftingOpen && !isLootOpen && evt.button === 0) {
+            canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock || canvas.webkitRequestPointerLock;
+            canvas.requestPointerLock();
+        }
+        // Handle interaction click (e.g., attacking) even if pointer not locked? Maybe not.
+    };
+
+
+    return scene; // Return the fully initialized scene
+}
+
+
+// --- Input Handling for Single Presses ---
+function handleKeyPress(key) {
+    if (key === "tab") {
+        toggleInventory();
+    } else if (key === "c") { // Use 'C' for crafting by default
+        toggleCraftingMenu();
+    } else if (key === "escape") {
+         if (isInventoryOpen || isCraftingOpen || isLootOpen) {
+            closeAllPanels();
+         } else {
+             // Optional: Open pause menu or other action
+             console.log("Escape pressed, no panels open.");
+         }
+    } else if (key === "e") {
+        // Interaction attempt is handled in render loop via handleInteraction checking inputMap["e"]
+    } else if (key === "p") {
+        // Placing attempt is handled in render loop via handlePlacing checking inputMap["p"]
+    }
+     // Quick Bar Selection (1-5 keys)
+     if (!isInventoryOpen && !isCraftingOpen && !isLootOpen) {
+         const numKey = parseInt(key);
+         if (!isNaN(numKey) && numKey >= 1 && numKey <= quickBar.length) {
+             setActiveQuickBarSlot(numKey - 1);
+         }
+     }
+}
+
+function setActiveQuickBarSlot(index) {
+    if (index < 0 || index >= quickBar.length) return; // Safety check
+
+    // Remove highlight from previous slot
+    if (quickBarSlots[activeQuickBarIndex]) {
+        quickBarSlots[activeQuickBarIndex].style.border = '1px solid #555';
+    }
+    activeQuickBarIndex = index;
+    // Add highlight to new slot
+    if (quickBarSlots[activeQuickBarIndex]) {
+        quickBarSlots[activeQuickBarIndex].style.border = '2px solid yellow';
+    }
+    // No need to log every selection unless debugging
+    // logMessage(`Selected: ${items[quickBar[activeQuickBarIndex]?.id]?.name || 'Empty Slot'}`);
+}
+
+
+// --- Player Movement & Look ---
+let playerTargetRotationY = 0;
+
+function handlePlayerMovement(deltaTime) {
+    if (!player || isInventoryOpen || isCraftingOpen || isLootOpen) return; // Don't move if UI is open
+
+    const moveSpeed = player.speed * deltaTime; // Speed adjusted for frame time
+    let moveDirection = BABYLON.Vector3.Zero();
+
+    // --- Keyboard Movement ---
+    // Calculate movement vector based on player's current forward/right directions (horizontal plane)
+    const forward = player.forward.clone(); // Get current forward direction
+    forward.y = 0; // Ignore vertical component for WASD movement direction
+    forward.normalize();
+
+    const right = player.right.clone(); // Get current right direction
+    right.y = 0; // Ignore vertical component
+    right.normalize();
+
+
+    if (inputMap["w"]) {
+        moveDirection.addInPlace(forward);
+    }
+    if (inputMap["s"]) {
+        moveDirection.subtractInPlace(forward);
+    }
+    if (inputMap["a"]) {
+        moveDirection.subtractInPlace(right);
+    }
+    if (inputMap["d"]) {
+        moveDirection.addInPlace(right);
+    }
+
+
+    if (moveDirection.lengthSquared() > 0) {
+        moveDirection.normalize().scaleInPlace(moveSpeed);
+
+        // Apply movement vector. Gravity is handled by scene.gravity now.
+        player.moveWithCollisions(moveDirection);
+
+        // Basic Footstep Sounds (Requires sound setup)
+        // playFootstepSound();
+    }
+
+    // --- Player Rotation based on Camera ---
+    // Only update player horizontal rotation based on camera yaw
+    // Use quaternions for smoother rotation
+    const cameraYaw = camera.rotation.y;
+    const targetRotation = BABYLON.Quaternion.RotationYawPitchRoll(cameraYaw, 0, 0);
+    // Smoothly interpolate rotation (optional, direct set is simpler)
+    player.rotationQuaternion = BABYLON.Quaternion.Slerp(player.rotationQuaternion, targetRotation, 0.15);
+
+    // Camera pitch (up/down look) is handled directly by the UniversalCamera mouse input when pointer is locked
+}
+
+
+// --- Interaction Logic ---
+function castRay() {
+    // Raycast from screen center using camera's forward direction
+    const ray = new BABYLON.Ray(camera.globalPosition, camera.getForwardRay().direction, PLAYER_REACH);
+    const hit = scene.pickWithRay(ray, (mesh) => {
+        // Only pick meshes that are interactable, enabled, and not the player itself
+        return mesh !== player && mesh.metadata && mesh.isEnabled() && mesh.metadata.type;
+    });
+
+    let previouslyHighlighted = highlightedMesh;
+
+    if (hit.pickedMesh) { // Already checked distance with ray length
+        highlightedMesh = hit.pickedMesh;
+        if (highlightedMesh !== previouslyHighlighted) {
+            // Reset previous highlight
+            if (previouslyHighlighted && previouslyHighlighted.renderOutline) {
+                previouslyHighlighted.renderOutline = false;
+                previouslyHighlighted.outlineColor = BABYLON.Color3.Black(); // Reset color
+            }
+            // Apply highlight (outline)
+            highlightedMesh.renderOutline = true;
+            highlightedMesh.outlineWidth = 0.05;
+            highlightedMesh.outlineColor = BABYLON.Color3.Yellow();
+            showInteractionPrompt(true, highlightedMesh.metadata.type);
+        }
+    } else {
+        highlightedMesh = null; // Nothing in range or looking away
+        if (previouslyHighlighted && previouslyHighlighted.renderOutline) {
+            previouslyHighlighted.renderOutline = false; // Remove highlight
+            previouslyHighlighted.outlineColor = BABYLON.Color3.Black();
+        }
+        showInteractionPrompt(false); // Hide prompt
+    }
+}
+
+function handleInteraction() {
+    // Check the inputMap state for 'e' - ensures single interaction per press/hold
+    if (inputMap["e"] && highlightedMesh) {
+        const meta = highlightedMesh.metadata;
+        if (!meta || !meta.type) return; // Ensure valid metadata
+
+        // logMessage(`Interacting with ${meta.type}...`); // Can be noisy
+
+        switch (meta.type) {
+            case "resource":
+                gatherResource(highlightedMesh);
+                break;
+            case "pickup":
+                pickupItem(highlightedMesh);
+                break;
+            case "lootable":
+                openLootContainer(highlightedMesh);
+                break;
+            case "animal":
+                if (meta.isDead) {
+                    harvestAnimal(highlightedMesh);
+                } else {
+                    attackAnimal(highlightedMesh); // Interact to attack if alive
+                }
+                break;
+            case "water":
+                fillCanteen(highlightedMesh);
+                break;
+            case "placed_object":
+                // Handle based on original item ID
+                if (meta.originalItemId === 'campfire') {
+                     interactWithCampfire(highlightedMesh);
+                } else if (meta.originalItemId === 'forge') {
+                     interactWithForge(highlightedMesh); // Placeholder
+                } else if (meta.originalItemId === 'crafting_table') {
+                     // Maybe just check proximity for crafting, no direct interaction needed?
+                     logMessage("Using crafting table nearby.");
+                }
+                break;
+            // Add more interaction types: Doors, switches, etc.
+            default:
+                logMessage(`Cannot interact with ${meta.type}`);
+        }
+
+        inputMap["e"] = false; // Consume the input for this frame to prevent rapid multi-interact
+    }
+}
+
+function showInteractionPrompt(show, type = "") {
+     if (show && type && highlightedMesh) { // Ensure highlightedMesh is valid
+        let text = `Press E to Interact`;
+        const meta = highlightedMesh.metadata;
+        try { // Wrap in try-catch in case metadata or items[id] is bad
+            switch(type) {
+                case "resource": text = `Press E to Gather ${items[meta.resourceId]?.name || 'Resource'}`; break;
+                case "pickup": text = `Press E to Pickup ${items[meta.itemId]?.name || 'Item'}`; break;
+                case "lootable": text = `Press E to Search ${meta.name || 'Container'}`; break; // Add name to barrels?
+                case "animal": text = meta.isDead ? `Press E to Harvest ${meta.species || 'Animal'}` : `Press E to Attack ${meta.species || 'Animal'}`; break;
+                case "water": text = `Press E to Fill Canteen`; break;
+                case "placed_object": text = `Press E to Use ${items[meta.originalItemId]?.name || 'Object'}`; break;
+                default: text = `Press E to Interact with ${type}`;
+            }
+        } catch (e) { console.error("Error creating interaction prompt text:", e); }
+
+        interactionPrompt.textContent = text;
+        interactionPrompt.classList.remove('hidden');
+     } else {
+         interactionPrompt.classList.add('hidden');
+     }
+}
+
+
+// --- Resource Gathering ---
+function gatherResource(resourceMesh) {
+    const meta = resourceMesh.metadata;
+    if (!meta || meta.health <= 0) return;
+
+    const requiredTool = meta.tool;
+    const heldItem = getHeldItem(); // Check player's active quick bar slot
+
+    if (requiredTool && (!heldItem || items[heldItem.id]?.tool !== requiredTool)) {
+        logMessage(`You need a ${requiredTool} to gather this.`);
+        return;
+    }
+
+    // logMessage(`Gathering ${items[meta.resourceId]?.name}...`); // Can be noisy
+    // Add animation/sound effect here
+    meta.health -= 25; // Damage per hit
+
+    if (meta.health <= 0) {
+        const amount = Math.floor(Math.random() * 4) + 2; // Random amount
+        logMessage(`Gathered ${amount} ${items[meta.resourceId]?.name}!`);
+        addItemToInventory(meta.resourceId, amount);
+
+        // Disable or remove the mesh
+        resourceMesh.setEnabled(false); // Simple disable
+        resourceMesh.checkCollisions = false; // Stop colliding
+        // Optionally hide completely
+        // resourceMesh.visibility = 0;
+
+        // Respawn logic (Example)
+        /*
+        setTimeout(() => {
+            if (resourceMesh) { // Check if mesh still exists (game might have stopped)
+                resourceMesh.setEnabled(true);
+                resourceMesh.checkCollisions = true;
+                resourceMesh.visibility = 1;
+                meta.health = 100; // Reset health
+                logMessage(`${items[meta.resourceId]?.name} has respawned.`);
+            }
+        }, 60000 * 5); // Respawn after 5 minutes
+        */
+
+        if (highlightedMesh === resourceMesh) {
+             highlightedMesh = null; // Clear highlight if it was the gathered one
+             showInteractionPrompt(false);
+        }
+    } else {
+        // Play hitting sound, show visual effect (e.g., particles)
+    }
+}
+
+
+// --- Item Pickup ---
+function pickupItem(itemMesh) {
+    const meta = itemMesh.metadata;
+    if (!meta) return;
+
+    if (addItemToInventory(meta.itemId, meta.quantity || 1)) {
+        logMessage(`Picked up ${meta.quantity || 1} ${items[meta.itemId]?.name}`);
+        itemMesh.dispose(); // Remove the item mesh from the world
+        if (highlightedMesh === itemMesh) {
+             highlightedMesh = null;
+             showInteractionPrompt(false);
+        }
+    }
+    // Inventory full message handled by addItemToInventory
+}
+
+
+// --- Looting ---
+function openLootContainer(containerMesh) {
+     if (isInventoryOpen || isCraftingOpen) return; // Prevent opening multiple panels
+     closeAllPanels(); // Close others just in case
+
+     currentLootSource = containerMesh;
+     const meta = containerMesh.metadata;
+     if (!meta || !meta.lootTable) return;
+
+     lootGrid.innerHTML = ''; // Clear previous loot
+
+     // Generate or retrieve loot
+     if (!meta.currentLoot || meta.isLootRefreshed) {
+        meta.currentLoot = generateLoot(meta.lootTable);
+        meta.isLootRefreshed = false;
+     }
+
+     if (!meta.currentLoot || meta.currentLoot.filter(Boolean).length === 0) {
+         logMessage("Container is empty.");
+         currentLootSource = null;
+         return;
+     }
+
+     // Set title
+     lootContainer.querySelector('h2').textContent = meta.name || 'Loot';
+
+     updateLootUI(); // Populate the UI grid
+
+     lootContainer.classList.remove('hidden');
+     isLootOpen = true;
+     pauseGame();
+}
+
+function closeLootContainer() {
+     lootContainer.classList.add('hidden');
+     isLootOpen = false;
+     currentLootSource = null;
+     resumeGame();
+}
+
+function generateLoot(lootTable) {
+    let loot = [];
+    const numItems = Math.floor(Math.random() * 4) + 2; // 2-5 items
+    for (let i = 0; i < numItems; i++) {
+        const randomItemId = lootTable[Math.floor(Math.random() * lootTable.length)];
+        if (items[randomItemId]) {
+            const existing = loot.find(item => item.id === randomItemId);
+            const quantity = items[randomItemId].stackable ? (Math.floor(Math.random() * 5) + 1) : 1;
+            if (existing && items[randomItemId].stackable) {
+                 existing.quantity += quantity; // Stack if already present
+            } else {
+                 loot.push({ id: randomItemId, quantity: quantity });
+            }
+        }
+    }
+    return loot;
+}
+
+function takeLootItem(index) {
+    if (!currentLootSource || !currentLootSource.metadata.currentLoot) return;
+
+    const lootItem = currentLootSource.metadata.currentLoot[index];
+    if (!lootItem) return; // Clicked an empty/already taken slot
+
+    if (addItemToInventory(lootItem.id, lootItem.quantity)) {
+        logMessage(`Took ${lootItem.quantity} ${items[lootItem.id]?.name}`);
+        currentLootSource.metadata.currentLoot[index] = null; // Mark as taken
+        updateLootUI(); // Refresh loot UI
+    }
+    // Inventory full message handled by addItemToInventory
+}
+
+function updateLootUI() {
+    // Updates the loot grid content based on currentLootSource
+    if (!isLootOpen || !currentLootSource || !currentLootSource.metadata) return;
+    const meta = currentLootSource.metadata;
+    lootGrid.innerHTML = ''; // Clear grid
+
+     if (!meta.currentLoot || meta.currentLoot.filter(Boolean).length === 0) {
+         closeLootContainer(); // Close if now empty
+         logMessage("Container is empty.");
+         return;
+     }
+
+    meta.currentLoot.forEach((item, index) => {
+         const slotDiv = document.createElement('div');
+         slotDiv.classList.add('slot');
+         slotDiv.style.pointerEvents = 'all';
+         if (item) {
+            const itemDef = items[item.id];
+            slotDiv.style.backgroundImage = `url(${itemDef?.icon || ''})`;
+            slotDiv.title = `${itemDef?.name || 'Unknown Item'} (${item.quantity})`;
+            slotDiv.dataset.itemId = item.id;
+            slotDiv.dataset.index = index;
+            if (itemDef?.stackable && item.quantity > 1) {
+                const countSpan = document.createElement('span');
+                countSpan.classList.add('item-count');
+                countSpan.textContent = item.quantity;
+                slotDiv.appendChild(countSpan);
+            }
+            slotDiv.onclick = () => takeLootItem(index);
+         } else {
+            slotDiv.style.backgroundColor = 'rgba(0,0,0,0.2)'; // Visually empty slot
+         }
+         lootGrid.appendChild(slotDiv);
+     });
+}
+
+
+// --- Inventory Management ---
+function addItemToInventory(itemId, quantity = 1) {
+    const itemDef = items[itemId];
+    if (!itemDef) {
+        console.error(`Attempted to add unknown item: ${itemId}`);
+        return false;
+    }
+
+    let remainingQuantity = quantity;
+
+    // Define inventory search order: Quick Bar stack -> Inventory stack -> Inventory empty -> Quick Bar empty
+    const lists = [quickBar, playerInventory];
+    const listTypes = ['quickbar', 'inventory'];
+
+    // 1. Try stacking
+    if (itemDef.stackable) {
+        for (let listIdx = 0; listIdx < lists.length; listIdx++) {
+            const currentList = lists[listIdx];
+            for (let i = 0; i < currentList.length; i++) {
+                if (currentList[i] && currentList[i].id === itemId) {
+                    // Add stack size limit check here if needed (e.g., max 64)
+                    currentList[i].quantity += remainingQuantity;
+                    remainingQuantity = 0;
+                    // logMessage(`Added ${quantity} ${itemDef.name} to ${listTypes[listIdx]} stack.`);
+                    updateInventoryUI(); updateQuickBarUI(); updateCraftingUI();
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 2. Find empty slot (Inventory first, then Quick Bar)
+    if (remainingQuantity > 0) {
+         // Check Inventory empty slots
+        let emptyInvSlotIndex = playerInventory.findIndex(slot => !slot);
+        if (emptyInvSlotIndex !== -1 && emptyInvSlotIndex < MAX_INVENTORY_SLOTS) {
+             playerInventory[emptyInvSlotIndex] = { id: itemId, quantity: remainingQuantity };
+             // logMessage(`Added ${remainingQuantity} ${itemDef.name} to inventory slot ${emptyInvSlotIndex}.`);
+             remainingQuantity = 0;
+             updateInventoryUI(); updateQuickBarUI(); updateCraftingUI();
+             return true;
+        }
+         // Check if we can push to inventory if not yet full (dynamic array case)
+         else if (playerInventory.length < MAX_INVENTORY_SLOTS) {
+              playerInventory.push({ id: itemId, quantity: remainingQuantity });
+              // logMessage(`Added ${remainingQuantity} ${itemDef.name} to end of inventory.`);
+              remainingQuantity = 0;
+              updateInventoryUI(); updateQuickBarUI(); updateCraftingUI();
+              return true;
+         }
+         // Check Quick Bar empty slots
+         else {
+             let emptyQBSlotIndex = quickBar.findIndex(slot => !slot);
+             if (emptyQBSlotIndex !== -1) {
+                 quickBar[emptyQBSlotIndex] = { id: itemId, quantity: remainingQuantity };
+                 // logMessage(`Added ${remainingQuantity} ${itemDef.name} to quick bar slot ${emptyQBSlotIndex}.`);
+                 remainingQuantity = 0;
+                 updateInventoryUI(); updateQuickBarUI(); updateCraftingUI();
+                 return true;
+             }
+         }
+    }
+
+    if (remainingQuantity > 0) {
+        logMessage("Inventory is full!");
+        return false; // Could not add the item
+    }
+    return true; // Item was added
+}
+
+function removeItemFromInventory(itemId, quantity = 1, specificSlot = null, source = 'any') {
+    // source: 'inventory', 'quickbar', 'any'
+    // specificSlot: { type: 'inventory'/'quickbar', index: slotIndex }
+    const itemDef = items[itemId];
+    if (!itemDef) return false;
+
+    let removedQuantity = 0;
+    let qbSearched = false;
+    let invSearched = false;
+
+    const searchList = (list, listType) => {
+        if (source !== 'any' && source !== listType) return false; // Skip if source doesn't match
+
+        for (let i = list.length - 1; i >= 0; i--) { // Iterate backwards for safe removal/modification
+            const currentSlot = list[i];
+            if (currentSlot && currentSlot.id === itemId) {
+                // If a specific slot is requested, only check that one
+                if (specificSlot && (specificSlot.type !== listType || specificSlot.index !== i)) {
+                    continue; // Skip if not the specific slot requested
+                }
+
+                const amountToRemove = Math.min(quantity - removedQuantity, currentSlot.quantity);
+                currentSlot.quantity -= amountToRemove;
+                removedQuantity += amountToRemove;
+
+                if (currentSlot.quantity <= 0) {
+                    list[i] = null; // Clear the slot
+                }
+
+                if (removedQuantity >= quantity) {
+                    return true; // Enough removed
+                }
+            }
+        }
+        return false; // Not enough removed from this list
+    };
+
+    // Search order: Specific slot -> Quick Bar -> Inventory
+    if (specificSlot) {
+        if (specificSlot.type === 'quickbar') {
+            if (searchList(quickBar, 'quickbar')) { qbSearched = true; }
+        } else if (specificSlot.type === 'inventory') {
+            if (searchList(playerInventory, 'inventory')) { invSearched = true; }
+        }
+        if (removedQuantity >= quantity) { // Check if done after specific slot search
+             updateInventoryUI(); updateQuickBarUI(); updateCraftingUI();
+             return true;
+        }
+    }
+
+    // Continue search if needed and allowed by 'source'
+    if (removedQuantity < quantity && !qbSearched) { // Search QB if not done yet
+         if (searchList(quickBar, 'quickbar')) { qbSearched = true; }
+         if (removedQuantity >= quantity) {
+             updateInventoryUI(); updateQuickBarUI(); updateCraftingUI();
+             return true;
+         }
+    }
+    if (removedQuantity < quantity && !invSearched) { // Search Inv if not done yet
+         if (searchList(playerInventory, 'inventory')) { invSearched = true; }
+         // Final check here, even if returns false, update UI if *some* were removed
+    }
+
+    // Update UI if any changes occurred
+    if (removedQuantity > 0) {
+        updateInventoryUI();
+        updateQuickBarUI();
+        updateCraftingUI();
+    }
+
+    return removedQuantity >= quantity; // Return true only if the *full* required quantity was removed
+}
+
+function findInventoryItem(itemId) {
+     // Finds the first instance of an item and returns its info { item, type, index }
+     let qbIndex = quickBar.findIndex(i => i?.id === itemId);
+     if (qbIndex !== -1) {
+         return { item: quickBar[qbIndex], type: 'quickbar', index: qbIndex };
+     }
+     let invIndex = playerInventory.findIndex(i => i?.id === itemId);
+     if (invIndex !== -1) {
+         return { item: playerInventory[invIndex], type: 'inventory', index: invIndex };
+     }
+     return null; // Not found
+}
+
+
+function hasResources(requirements) {
+    for (const itemId in requirements) {
+        const requiredQty = requirements[itemId];
+        let currentQty = 0;
+        // Check both inventory and quick bar efficiently
+        for(const slot of quickBar) { if (slot?.id === itemId) currentQty += slot.quantity; }
+        for(const slot of playerInventory) { if (slot?.id === itemId) currentQty += slot.quantity; }
+
+        if (currentQty < requiredQty) {
+            // logMessage(`Need ${requiredQty - currentQty} more ${items[itemId]?.name || itemId}`); // Can be noisy
+            return false; // Not enough of this item
+        }
+    }
+    return true; // Has all required items
+}
+
+function closeAllPanels() {
+     if (isInventoryOpen) toggleInventory(false); // Force close
+     if (isCraftingOpen) toggleCraftingMenu(false);
+     if (isLootOpen) closeLootContainer();
+     // Clear highlight just in case
+     if (highlightedMesh && highlightedMesh.renderOutline) {
+          highlightedMesh.renderOutline = false;
+          highlightedMesh = null;
+          showInteractionPrompt(false);
+     }
+}
+
+function pauseGame() {
+    engine.stopRenderLoop(); // Pause game rendering/logic
+    document.exitPointerLock(); // Unlock mouse cursor
+    uiContainer.style.pointerEvents = 'all'; // Allow UI interaction
+}
+
+function resumeGame() {
+     // Only resume if no panels are intended to be open
+    if (!isInventoryOpen && !isCraftingOpen && !isLootOpen) {
+         engine.runRenderLoop(renderLoop); // Resume game
+         uiContainer.style.pointerEvents = 'none'; // Disable UI interaction unless over specific elements
+         // Re-locking pointer requires user click again (handled by scene.onPointerDown)
+    }
+}
+
+
+function toggleInventory(forceState = null) {
+    const willBeOpen = forceState !== null ? forceState : !isInventoryOpen;
+
+    if (willBeOpen && (isCraftingOpen || isLootOpen)) {
+         closeAllPanels(); // Close others before opening inventory
+    } else if (!willBeOpen && isInventoryOpen) {
+         // Closing inventory
+    } else if (willBeOpen && !isInventoryOpen) {
+         // Opening inventory
+    } else {
+         return; // State isn't changing
+    }
+
+    isInventoryOpen = willBeOpen;
+    inventoryPanel.classList.toggle('hidden', !isInventoryOpen);
+
+    if (isInventoryOpen) {
+        updateInventoryUI(); // Refresh UI when opening
+        pauseGame();
+    } else {
+        resumeGame();
+    }
+}
+
+function updateInventoryUI() {
+    inventoryGrid.innerHTML = ''; // Clear existing slots
+
+    // Ensure playerInventory has fixed size (fill with nulls if needed)
+     while (playerInventory.length < MAX_INVENTORY_SLOTS) {
+         playerInventory.push(null);
+     }
+     if (playerInventory.length > MAX_INVENTORY_SLOTS) {
+         playerInventory.length = MAX_INVENTORY_SLOTS; // Truncate if too long
+     }
+
+    for (let index = 0; index < MAX_INVENTORY_SLOTS; index++) {
+         const item = playerInventory[index];
+         const slotDiv = document.createElement('div');
+         slotDiv.classList.add('slot');
+         slotDiv.style.pointerEvents = 'all'; // Allow clicking slots in panel
+         slotDiv.dataset.slotType = 'inventory';
+         slotDiv.dataset.index = index;
+
+         if (item) {
+             const itemDef = items[item.id];
+             if (!itemDef) { console.warn(`Invalid item ID in inventory: ${item.id}`); continue; }
+
+             slotDiv.style.backgroundImage = `url(${itemDef.icon || ''})`;
+             slotDiv.title = `${itemDef.name || 'Unknown Item'} (${item.quantity})`;
+
+             if (itemDef.stackable && item.quantity > 1) {
+                 const countSpan = document.createElement('span');
+                 countSpan.classList.add('item-count');
+                 countSpan.textContent = item.quantity;
+                 slotDiv.appendChild(countSpan);
+             }
+             // Canteen display
+             if (item.id === 'canteen' && item.contains) {
+                 const waterIconDiv = document.createElement('div');
+                 waterIconDiv.style.cssText = `position: absolute; bottom: 3px; left: 3px; width: 18px; height: 18px; background-image: url(${items[item.contains.id]?.icon || ''}); background-size: contain; opacity: 0.9; pointer-events: none;`;
+                 slotDiv.appendChild(waterIconDiv);
+                 slotDiv.title += ` - Contains: ${items[item.contains.id]?.name}`;
+             }
+         } else {
+              slotDiv.title = 'Empty Inventory Slot';
+         }
+
+         slotDiv.onclick = (event) => handleSlotClick(event, slotDiv, 'inventory', index);
+         inventoryGrid.appendChild(slotDiv);
+    }
+}
+
+function updateQuickBarUI() {
+    quickBarSlots.forEach((slotDiv, index) => {
+        const item = quickBar[index];
+        slotDiv.innerHTML = ''; // Clear previous content (like count)
+        slotDiv.style.backgroundImage = '';
+        slotDiv.dataset.slotType = 'quickbar';
+        slotDiv.dataset.index = index;
+        slotDiv.style.border = index === activeQuickBarIndex ? '2px solid yellow' : '1px solid #555';
+        slotDiv.style.pointerEvents = 'all'; // Allow clicking when inventory is open
+
+        if (item) {
+            const itemDef = items[item.id];
+             if (!itemDef) { console.warn(`Invalid item ID in quickbar: ${item.id}`); return; }
+
+            slotDiv.style.backgroundImage = `url(${itemDef.icon || ''})`;
+            slotDiv.title = `${itemDef.name || 'Unknown Item'} (${item.quantity})`;
+
+            if (itemDef.stackable && item.quantity > 1) {
+                const countSpan = document.createElement('span');
+                countSpan.classList.add('item-count');
+                countSpan.textContent = item.quantity;
+                slotDiv.appendChild(countSpan);
+            }
+            // Canteen display
+             if (item.id === 'canteen' && item.contains) {
+                 const waterIconDiv = document.createElement('div');
+                 waterIconDiv.style.cssText = `position: absolute; bottom: 3px; left: 3px; width: 18px; height: 18px; background-image: url(${items[item.contains.id]?.icon || ''}); background-size: contain; opacity: 0.9; pointer-events: none;`;
+                 slotDiv.appendChild(waterIconDiv);
+                 slotDiv.title += ` - Contains: ${items[item.contains.id]?.name}`;
+             }
+        } else {
+             slotDiv.title = 'Empty Quick Bar Slot';
+        }
+
+        // Click handler: Move item if inventory open, otherwise select slot
+        slotDiv.onclick = (event) => {
+            if(isInventoryOpen) {
+                 handleSlotClick(event, slotDiv, 'quickbar', index);
+            } else {
+                 setActiveQuickBarSlot(index);
+            }
+        };
+    });
+}
+
+function handleSlotClick(event, slotDiv, sourceType, sourceIndex) {
+    if (!isInventoryOpen) return; // Should only be callable when inventory is open
+
+    if (event.shiftKey) {
+        moveItem(sourceType, sourceIndex);
+    } else {
+        // Handle simple click (select? use?) - currently does nothing
+        // console.log(`Clicked ${sourceType} slot ${sourceIndex}`);
+    }
+}
+
+function moveItem(sourceType, sourceIndex) {
+    const sourceList = sourceType === 'inventory' ? playerInventory : quickBar;
+    const targetList = sourceType === 'inventory' ? quickBar : playerInventory;
+    const targetMaxSize = sourceType === 'inventory' ? quickBar.length : MAX_INVENTORY_SLOTS;
+    const targetType = sourceType === 'inventory' ? 'quickbar' : 'inventory';
+
+    const itemToMove = sourceList[sourceIndex];
+    if (!itemToMove) return; // Clicked empty slot
+
+    // Find first empty slot in target
+    let targetIndex = -1;
+    for (let i = 0; i < targetMaxSize; i++) { // Iterate up to max size
+         if (i >= targetList.length || !targetList[i]) { // Found empty or beyond current length
+             targetIndex = i;
+             break;
+         }
+     }
+
+    if (targetIndex !== -1 && targetIndex < targetMaxSize) {
+        // Ensure target list has space if dynamically sized (inventory)
+        while (targetIndex >= targetList.length && targetType === 'inventory') {
+             targetList.push(null);
+        }
+        // Perform the move
+        targetList[targetIndex] = itemToMove;
+        sourceList[sourceIndex] = null; // Clear original slot
+
+        updateInventoryUI();
+        updateQuickBarUI();
+        // logMessage(`Moved ${items[itemToMove.id]?.name}`); // Can be noisy
+    } else {
+        logMessage(`Target ${targetType === 'quickbar' ? 'Quick Bar' : 'Inventory'} is full.`);
+    }
+}
+
+
+// --- Crafting ---
+function toggleCraftingMenu(forceState = null) {
+    const willBeOpen = forceState !== null ? forceState : !isCraftingOpen;
+
+    if (willBeOpen && (isInventoryOpen || isLootOpen)) {
+        closeAllPanels(); // Close others first
+    } else if (!willBeOpen && isCraftingOpen) {
+        // Closing
+    } else if (willBeOpen && !isCraftingOpen) {
+        // Opening
+    } else {
+        return; // State unchanged
+    }
+
+    isCraftingOpen = willBeOpen;
+    craftingMenu.classList.toggle('hidden', !isCraftingOpen);
+
+    if (isCraftingOpen) {
+        updateCraftingUI(); // Refresh list when opening
+        pauseGame();
+    } else {
+        resumeGame();
+    }
+}
+
+function isNearStation(stationType) {
+    // Placeholder: Check if player is near a placed object of the required type
+    // e.g., Find meshes with metadata { type: 'placed_object', originalItemId: 'forge' }
+    // Calculate distance from player. Return true if close enough.
+    if (stationType === 'forge') {
+         // find forge mesh, check distance < 3? return true : false
+    } else if (stationType === 'crafting_table') {
+         // find table mesh, check distance < 3? return true : false
+    }
+    return true; // Assume stations are always available for now
+}
+
+
+function updateCraftingUI() {
+    craftingList.innerHTML = ''; // Clear previous list
+
+    for (const itemId in recipes) {
+        const recipe = recipes[itemId];
+        const itemDef = items[itemId];
+        if (!itemDef) continue;
+
+        const stationRequirementMet = !recipe.station || isNearStation(recipe.station);
+        const resourcesAvailable = hasResources(recipe.requires);
+        const canCraft = resourcesAvailable && stationRequirementMet;
+
+        const li = document.createElement('li');
+        li.style.pointerEvents = 'all';
+        li.dataset.itemId = itemId;
+
+        // Build description string
+        let reqString = Object.entries(recipe.requires)
+            .map(([reqId, reqQty]) => {
+                 const reqItemDef = items[reqId];
+                 return `${reqQty} ${reqItemDef?.name || '???'}`;
+            }).join(', ');
+        li.textContent = `${itemDef.name} (Needs: ${reqString})`;
+        if (recipe.station) {
+            li.textContent += ` [At ${items[recipe.station]?.name || recipe.station}]`;
+        }
+
+        li.classList.toggle('can-craft', canCraft);
+        li.classList.toggle('cannot-craft', !canCraft);
+
+        if (canCraft) {
+            li.onclick = () => craftItem(itemId);
+        } else {
+            li.title = stationRequirementMet ? "Not enough resources" : `Requires nearby ${items[recipe.station]?.name || recipe.station}`;
+            li.style.cursor = 'not-allowed';
+        }
+
+        craftingList.appendChild(li);
+    }
+}
+
+function craftItem(itemId) {
+    const recipe = recipes[itemId];
+    if (!recipe) return;
+
+     // Re-check resources and station just before crafting
+     const stationRequirementMet = !recipe.station || isNearStation(recipe.station);
+
+    if (hasResources(recipe.requires) && stationRequirementMet) {
+        // Consume resources
+        let consumedSuccessfully = true;
+        for (const reqId in recipe.requires) {
+            if (!removeItemFromInventory(reqId, recipe.requires[reqId])) {
+                 // This should ideally not happen if hasResources passed, but log just in case
+                 console.error(`Crafting Error: Failed to remove required ${items[reqId]?.name}`);
+                 logMessage(`Crafting failed: resource error.`);
+                 consumedSuccessfully = false;
+                 // NOTE: No easy rollback for previously removed items.
+                 break;
+             }
+        }
+
+        // Add crafted item if consumption was successful
+        if (consumedSuccessfully) {
+             const created = recipe.creates;
+             if (addItemToInventory(created.id, created.quantity)) {
+                 logMessage(`Crafted ${created.quantity} ${items[created.id]?.name}!`);
+             } else {
+                 logMessage(`Inventory full! Cannot receive crafted ${items[created.id]?.name}!`);
+                 // TODO: Drop item in world? Or give back resources? Difficult.
+             }
+             updateCraftingUI(); // Re-check craftable status after consumption
+        }
+    } else {
+        logMessage(stationRequirementMet ? "Not enough resources!" : `Requires nearby ${items[recipe.station]?.name || recipe.station}`);
+    }
+}
+
+
+// --- Placing Items ---
+function handlePlacing() {
+     // Check inputMap state for 'p'
+     if (inputMap["p"]) {
+         const itemToPlace = getHeldItem(); // Get item from active quick bar slot
+
+         if (itemToPlace && items[itemToPlace.id]?.placeable) {
+             const placeableItemDef = items[itemToPlace.id];
+
+             // Raycast to find placement position
+             const ray = new BABYLON.Ray(camera.globalPosition, camera.getForwardRay().direction, PLAYER_REACH + 2); // Allow placing slightly further
+             const hit = scene.pickWithRay(ray, (mesh) => mesh === ground /*|| mesh.metadata?.type === 'building_floor'*/); // Valid placement surfaces
+
+             if (hit.pickedPoint) {
+                 // *** IMPORTANT: This needs actual 3D models (.glb/.gltf) ***
+                 const modelFileName = placeableItemDef.model;
+                 if (modelFileName) {
+                     logMessage(`Placing ${placeableItemDef.name}...`);
+                     BABYLON.SceneLoader.ImportMeshAsync("", "assets/models/", modelFileName, scene)
+                         .then((result) => {
+                             if (!result.meshes || result.meshes.length === 0) throw new Error("Loaded model has no meshes.");
+
+                             const placedMesh = result.meshes[0];
+                             placedMesh.position = hit.pickedPoint.clone();
+                             // Adjust Y position based on model's bounding box minimum to sit on ground
+                             const bounds = placedMesh.getHierarchyBoundingVectors(true);
+                             const heightOffset = placedMesh.position.y - bounds.min.y;
+                             placedMesh.position.y += heightOffset + 0.01; // Add small epsilon
+
+                             placedMesh.checkCollisions = true;
+                             placedMesh.metadata = { type: "placed_object", originalItemId: itemToPlace.id };
+                             shadowGenerator.addShadowCaster(placedMesh); // Placed objects cast shadows
+                             placedMesh.receiveShadows = true;
+
+                             // Add specific state for functional items
+                             if (itemToPlace.id === 'campfire') {
+                                 placedMesh.metadata.fuel = 0;
+                                 placedMesh.metadata.isLit = false;
+                                 placedMesh.metadata.cookingSlots = [null, null, null]; // {itemId, cookTime, cookDuration}
+                             } else if (itemToPlace.id === 'forge') {
+                                 placedMesh.metadata.fuel = 0;
+                                 placedMesh.metadata.isLit = false;
+                                 placedMesh.metadata.smeltingSlot = null; // {itemId, smeltTime, smeltDuration}
+                                 placedMesh.metadata.outputSlot = null; // {itemId, quantity}
+                             }
+
+                             logMessage(`Placed ${placeableItemDef.name} successfully.`);
+
+                             // Remove one item from the specific quickbar slot
+                             if (!removeItemFromInventory(itemToPlace.id, 1, { type: 'quickbar', index: activeQuickBarIndex }, 'quickbar')) {
+                                 console.error("Failed to remove placed item from quickbar!");
+                                 placedMesh.dispose(); // Revert placement if item couldn't be removed
+                                 logMessage("Placement failed (item removal error).");
+                             }
+                         }).catch(error => {
+                              console.error("Error loading/placing model:", modelFileName, error);
+                              logMessage(`Error placing ${placeableItemDef.name}. Model missing or invalid?`);
+                         });
+                 } else {
+                     logMessage(`No model defined for placeable item ${placeableItemDef.name}`);
+                 }
+             } else {
+                 logMessage("Cannot place item here (invalid surface or too far).");
+             }
+         }
+         inputMap["p"] = false; // Consume input for this frame
+     }
+}
+
+
+// --- Cooking / Boiling / Station Interaction (Placeholders) ---
+// NOTE: These need dedicated UI panels for proper interaction.
+// Timers should be handled in a central update loop (updateWorldTimers).
+
+function interactWithCampfire(campfireMesh) {
+    const meta = campfireMesh.metadata;
+    if (!meta) return;
+    logMessage(`Campfire - Fuel: ${meta.fuel}, Lit: ${meta.isLit}`);
+    // Placeholder Actions: Add Wood, Light, Add Meat, Retrieve Cooked
+    // OpenCampfireUI(campfireMesh); // Needs UI implementation
+    logMessage("Campfire UI not implemented.");
+}
+
+function interactWithForge(forgeMesh) {
+    const meta = forgeMesh.metadata;
+    if (!meta) return;
+    logMessage(`Forge - Fuel: ${meta.fuel}, Lit: ${meta.isLit}`);
+    // Placeholder Actions: Add Fuel, Light, Add Scrap, Retrieve Ingot
+    // OpenForgeUI(forgeMesh); // Needs UI implementation
+    logMessage("Forge UI not implemented.");
+}
+
+function fillCanteen(waterMesh) {
+     const canteenInfo = findInventoryItem('canteen');
+     if (canteenInfo) {
+         const theCanteen = canteenInfo.item;
+         if (!theCanteen.contains || theCanteen.contains.id !== 'water_dirty') {
+             theCanteen.contains = { id: 'water_dirty', quantity: 1 };
+             logMessage("Filled canteen with dirty water.");
+             updateInventoryUI(); updateQuickBarUI();
+         } else {
+             logMessage("Canteen already contains dirty water.");
+         }
+     } else {
+         logMessage("You need a canteen to collect water.");
+     }
+}
+
+// --- Central Timer Update Loop (Placeholder) ---
+function updateWorldTimers(deltaTime) {
+    // Iterate through all placed campfires, forges etc. in the scene
+    // Find meshes with metadata.type === 'placed_object'
+    scene.meshes.forEach(mesh => {
+        if (mesh.metadata?.type === 'placed_object' && mesh.isEnabled()) {
+            const meta = mesh.metadata;
+            // Campfire Logic
+            if (meta.originalItemId === 'campfire' && meta.isLit) {
+                meta.fuel -= deltaTime * 0.1; // Fuel consumption rate
+                if (meta.fuel <= 0) { meta.isLit = false; meta.fuel = 0; logMessage("Campfire went out."); /* Turn off particle effect */ }
+
+                // Update cooking slots
+                meta.cookingSlots?.forEach((slot, index) => {
+                    if (slot && slot.itemId === 'raw_meat') { // Check if ready
+                         slot.cookTime += deltaTime;
+                         if (slot.cookTime >= slot.cookDuration) {
+                             logMessage("Meat cooked!");
+                             slot.itemId = 'cooked_meat'; // Change item in slot
+                             // Maybe add visual change?
+                         }
+                    } else if (slot && slot.itemId === 'canteen' && slot.content === 'water_dirty') {
+                         // Boiling water in canteen
+                         slot.cookTime += deltaTime;
+                         if (slot.cookTime >= slot.cookDuration) {
+                              logMessage("Water boiled!");
+                              slot.content = 'water_clean';
+                              // Find the actual canteen item in player inv/qb and update its .contains prop? Complex linking.
+                              // Easier: Player retrieves canteen, its state is updated then.
+                         }
+                    }
+                });
+            }
+            // Forge Logic
+            else if (meta.originalItemId === 'forge' && meta.isLit) {
+                 meta.fuel -= deltaTime * 0.2; // Forge uses more fuel
+                 if (meta.fuel <= 0) { meta.isLit = false; meta.fuel = 0; logMessage("Forge went out."); }
+
+                 // Update smelting slot
+                 if (meta.smeltingSlot && meta.smeltingSlot.itemId === 'scrap_metal') {
+                      meta.smeltingSlot.smeltTime += deltaTime;
+                      if (meta.smeltingSlot.smeltTime >= meta.smeltingSlot.smeltDuration) {
+                          logMessage("Metal smelted!");
+                          // Add to output buffer or slot
+                          if (!meta.outputSlot) meta.outputSlot = { itemId: 'metal_ingot', quantity: 0 };
+                          meta.outputSlot.quantity += 1; // Or based on recipe
+                          meta.smeltingSlot = null; // Clear input slot
+                      }
+                 }
+            }
+        }
+    });
+}
+
+
+// --- Animal Handling (Conceptual Placeholders) ---
+function updateAnimals(deltaTime) {
+    // Iterate scene.meshes, find metadata.type === 'animal'
+    // Update AI state machine (idle, roam, flee, attack)
+    // Move animal mesh based on state and deltaTime
+    // Play corresponding animations
+}
+
+function attackAnimal(animalMesh) {
+     const meta = animalMesh.metadata;
+     if (!meta || meta.isDead) return;
+
+     const heldItem = getHeldItem();
+     const weaponDamage = (heldItem && items[heldItem.id]?.tool === 'knife') ? 25 : (heldItem && items[heldItem.id]?.tool === 'axe') ? 15 : 5;
+
+     if (!heldItem || !items[heldItem.id]?.tool) { // Check if holding a tool at all
+         logMessage("Need a weapon/tool to attack.");
+         return;
+     }
+
+     meta.health -= weaponDamage;
+     logMessage(`Attacked ${meta.species || 'Animal'}, health: ${meta.health}`);
+     // Play attack sound/animation, animal hit sound/animation
+
+     if (meta.health <= 0) {
+         logMessage(`${meta.species || 'Animal'} killed!`);
+         meta.isDead = true; meta.health = 0;
+         // Stop AI, play death animation, disable collisions?
+         // animalMesh.checkCollisions = false;
+     } else {
+         meta.state = 'flee'; // Trigger flee AI state
+     }
+}
+
+function harvestAnimal(animalMesh) {
+     const meta = animalMesh.metadata;
+     if (!meta || !meta.isDead || meta.harvested) return;
+
+     const heldItem = getHeldItem();
+      if (!heldItem || items[heldItem.id]?.tool !== 'knife') {
+         logMessage(`Need a knife to harvest.`);
+         return;
+     }
+
+     logMessage(`Harvesting ${meta.species || 'Animal'}...`);
+     let harvestedSomething = false;
+     if (meta.drops) {
+         for (const itemId in meta.drops) {
+             const quantity = Math.floor(Math.random() * meta.drops[itemId]) + 1;
+             if (quantity > 0 && addItemToInventory(itemId, quantity)) {
+                 harvestedSomething = true; // Successfully added *some* loot
+             }
+         }
+     }
+
+     if (harvestedSomething) {
+        meta.harvested = true;
+        logMessage(`Harvested.`);
+        // Dispose corpse after delay
+        setTimeout(() => { if (animalMesh) animalMesh.dispose(); }, 15000);
+        if (highlightedMesh === animalMesh) { highlightedMesh = null; showInteractionPrompt(false); }
+     } else {
+         logMessage(`Nothing useful recovered.`);
+         meta.harvested = true; // Mark as harvested attempt
+         setTimeout(() => { if (animalMesh) animalMesh.dispose(); }, 5000); // Dispose quicker if empty
+     }
+}
+
+
+// --- Utility Functions ---
+function getHeldItem() {
+    // Get item from the currently selected quick bar slot
+    if (activeQuickBarIndex >= 0 && activeQuickBarIndex < quickBar.length) {
+        return quickBar[activeQuickBarIndex];
+    }
+    return null;
+}
+
+function logMessage(message, duration = 3500) {
+    // console.log("LOG:", message); // Keep for debugging if needed
+    const msgDiv = document.createElement('div');
+    msgDiv.textContent = message;
+    messageLog.appendChild(msgDiv);
+
+    // Limit number of messages shown
+     const maxMessages = 5;
+     while(messageLog.children.length > maxMessages) {
+         messageLog.removeChild(messageLog.firstChild);
+     }
+
+    // Remove the message after a delay + fade
+    const fadeOutTimer = setTimeout(() => {
+        msgDiv.style.opacity = '0';
+        msgDiv.style.transition = 'opacity 0.5s ease-out';
+        setTimeout(() => {
+            if (msgDiv.parentNode === messageLog) { messageLog.removeChild(msgDiv); }
+        }, 500); // Match CSS transition duration
+    }, duration);
+}
+
+
+// --- Main Render Loop ---
+let lastFrameTime = Date.now();
+function renderLoop() {
+    if (!scene || !engine) return; // Exit if scene/engine not ready
+
+    const currentTime = Date.now();
+    const deltaTime = (currentTime - lastFrameTime) / 1000.0; // Delta time in seconds
+    lastFrameTime = currentTime;
+
+    // Only process game logic if game is not paused by UI
+    if (!isInventoryOpen && !isCraftingOpen && !isLootOpen) {
+         // Handle player input for movement & look
+         handlePlayerMovement(deltaTime);
+
+         // Handle interactions
+         castRay();
+         handleInteraction(); // Checks inputMap["e"]
+
+         // Handle placing items
+         handlePlacing(); // Checks inputMap["p"]
+
+         // Update game world logic
+         // updateAnimals(deltaTime); // Placeholder
+         // updateWorldTimers(deltaTime); // Placeholder for cooking etc.
+    } else {
+         // Game is paused - perhaps update UI animations?
+    }
+
+    // Render the scene
+    scene.render();
+}
+
+
+// --- Game Initialization ---
+async function startGame() {
+    logMessage("Initializing game...", 5000);
+    try {
+        // Ensure canvas is visible and sized correctly
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+
+        scene = await createScene(); // Create the scene and its objects
+
+        // Event Listeners for UI Buttons
+        closeInventoryBtn.onclick = () => toggleInventory(false);
+        closeCraftingBtn.onclick = () => toggleCraftingMenu(false);
+        closeLootBtn.onclick = closeLootContainer;
+
+        // Set initial active quickbar slot visual
+        setActiveQuickBarSlot(0);
+
+        // Start the render loop using engine.runRenderLoop
+        engine.runRenderLoop(renderLoop);
+        logMessage("Game started!", 5000);
+
+        // Watch for browser/canvas resize events
+        window.addEventListener('resize', () => {
+            engine.resize();
+        });
+
+    } catch (error) {
+        console.error("Error starting game:", error);
+        logMessage(`FATAL ERROR: ${error.message}. Check console (F12).`, 60000);
+        // Display error prominently on screen
+         const errorDiv = document.createElement('div');
+         errorDiv.style.cssText = `position: absolute; top: 10px; left: 10px; padding: 15px; background-color: #8B0000; color: white; z-index: 100; border: 2px solid red; font-family: sans-serif; font-size: 1.1em;`;
+         errorDiv.textContent = `ERROR INITIALIZING GAME: ${error.message}. See console (F12) for details.`;
+         document.body.appendChild(errorDiv);
+         // Stop any potential loop if engine was started somehow
+         if (engine) engine.stopRenderLoop();
+    }
+}
+
+// --- Run the Game ---
+// Use DOMContentLoaded to ensure HTML is ready before starting Babylon
+document.addEventListener('DOMContentLoaded', () => {
+    if (BABYLON.Engine.isSupported()) {
+        startGame();
+    } else {
+        alert('Babylon.js is not supported on your browser!');
+    }
+});

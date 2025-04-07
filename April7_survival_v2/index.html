@@ -42,18 +42,26 @@
         </div>
 
         <!-- Build Menu (Initially Hidden) -->
-        <div id="build-menu" class="menu-panel">
+        <div id="build-menu" class="menu-panel"> <!-- Ensure this ID is correct -->
             <h2>Craft Buildables</h2>
-            <ul>
-                <!-- Use data-build-id matching CONSTANTS.BUILDABLES keys -->
+            <ul> <!-- Make sure the buttons are inside this UL -->
+                <!-- Structure -->
                 <li><button data-build-id="foundation">Foundation (W:4, S:2)</button></li>
                 <li><button data-build-id="wall">Wall (W:2)</button></li>
+                <!-- --- NEW STRUCTURE --- -->
+                <li><button data-build-id="wall_doorway">Wall w/ Doorway (W:2)</button></li>
+                <li><button data-build-id="wall_window">Wall w/ Window (W:2)</button></li>
+                <li><button data-build-id="door">Door (W:4)</button></li>
+                <!-- --- END NEW STRUCTURE --- -->
+                <!-- Stations -->
+                <li><button data-build-id="crafting_table">Crafting Table (W:10)</button></li>
+                <li><button data-build-id="forge">Forge (S:15, W:5)</button></li>
                 <li><button data-build-id="campfire">Campfire (W:5, F:2)</button></li>
-                <!-- Add more build options -->
             </ul>
-             <p class="menu-hint">Click to craft item into inventory.</p> <!-- Updated hint -->
+             <p class="menu-hint">Click to craft item into inventory.</p>
              <p class="menu-hint">Press [B] to close.</p>
         </div>
+
 
         <!-- Quick Bar -->
         <div id="quick-bar">
@@ -77,16 +85,16 @@
     <script src="js/constants.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/input.js"></script>
-    <script src="js/resources.js"></script> <!-- Resources before Inventory/Crafting -->
-    <script src="js/crafting.js"></script> <!-- Crafting before Inventory uses its recipes -->
-    <script src="js/inventory.js"></script> <!-- Inventory before Player/UI/Building -->
-    <script src="js/ui.js"></script>      <!-- UI Manager before Player/Building modifies UI state -->
+    <script src="js/resources.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/ui.js"></script>
     <script src="js/interaction.js"></script>
-    <script src="js/player.js"></script>   <!-- Player requires many modules -->
-    <script src="js/ai.js"></script>       <!-- AI requires Engine -->
-    <script src="js/world.js"></script>    <!-- World requires Engine, Resources, Inventory, AI -->
+    <script src="js/player.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/world.js"></script>
     <script src="js/building.js"></script> <!-- Building requires Constants, Engine, Input, Inventory, UI, World, Player, AI -->
-    <script src="js/main.js"></script>     <!-- Main initializes everything -->
+    <script src="js/main.js"></script>
 
 </body>
 </html>

@@ -4,252 +4,125 @@ Resources Found on the Map
 
 The world is rich with resources critical for survival and crafting. These include:
 Natural Resources
-
-    Wood – Harvested from trees using an axe. Essential for fuel, crafting, and building.
-
-    Fiber – Found as small plant nodes; used in cordage and clothing.
-
-    Vegetables – Wild plants like blueberries, carrots, onions.
-
-    Animals – Chickens, rabbits (can be captured or hunted), deer, wolves, bears, cougars.
-
-    Water – Gathered from lakes, boiled to purify.
-
-    Medical Plants – Used for biofuel and first aid.
+- Wood – Harvested from trees using an axe. Essential for fuel, crafting, and building.
+- Fiber – Found as small plant nodes; used in cordage and clothing.
+- Vegetables – Wild plants like blueberries, carrots, onions.
+- Animals – Chickens, rabbits (can be captured or hunted), deer, wolves, bears, cougars.
+- Water – Gathered from lakes, boiled to purify.
+- Medical Plants – Used for biofuel and first aid.
 
 Ore & Mining Resources
 
-    Iron Ore – Most common; found on rocks or in caves.
-
-    Copper Ore – Common for electronics and casings.
-
-    Potassium Ore – Used in fertilizer and gunpowder.
-
-    Zinc Ore – Needed for alloy sheets and upgrades.
-
-    Phosphorus – Found in caves; essential for high-end ammunition.
-
-    Crystal (Premium Crystals) – Rare; found in deep caves for advanced upgrades.
-
-    Coal – Also found in caves; used for fuel.
+- Iron Ore – Most common; found on rocks or in caves.
+- Copper Ore – Common for electronics and casings.
+- Potassium Ore – Used in fertilizer and gunpowder.
+- Zinc Ore – Needed for alloy sheets and upgrades.
+- Phosphorus – Found in caves; essential for high-end ammunition.
+- Crystal (Premium Crystals) – Rare; found in deep caves for advanced upgrades.
+- Coal – Also found in caves; used for fuel.
 
 Animal Products
 
-    Fat – Rendered into biofuel.
-
-    Leather – From animals, used in crafting clothes.
-
-    Meat – Cooked for food, spoils if left too long.
-
-    Feathers – For arrows and gear.
-
-    Antlers – From deer; used in adhesive.
+- Fat – Rendered into biofuel.
+- Leather – From animals, used in crafting clothes.
+- Meat – Cooked for food, spoils if left too long.
+- Feathers – For arrows and gear.
+- Antlers – From deer; used in adhesive.
 
 Crafting Overview
 
 Crafting is split into:
 
-    Basic Inventory Crafting
+Basic Inventory Craftin
 
-    Workbench Crafting
+Workbench Crafting
 
-    Fabricator, Stove, Refinery, and Forge Crafting
+- Fabricator, Stove, Refinery, and Forge Crafting
 
 Craftable Items in the Player Inventory
 
 Tools & Survival Gear
 
-    Axe – Wood and metal scrap.
-
-    Pickaxe – Used to mine ores.
-
-    Fishing Rod – Cordage, sticks, scrap.
-
-    Bows & Arrows – Wood, fiber, nails, feathers.
-
-    Campfire – For warmth and cooking.
-
-    Bandages & First Aid Kits – Cloth, medicinal herbs.
-
-Clothing
-
-    Pants, Shirts, Jackets – Cloth, feathers, sinew, padded cloth (made from cotton).
-
-    Winter Gear – Padded cloth, sinew, feathers.
-
-
-Crafting Bench / Workbench Craftables
+- Axe – Wood and metal scrap.
+- Pickaxe – Used to mine ores.
+- Fishing Rod – Cordage, sticks, scrap.
+- Bows & Arrows – Wood, fiber, nails, feathers.
+- Campfire – For warmth and cooking.
+- Bandages & First Aid Kits – Cloth, medicinal herbs.
 
 The Workbench allows advanced crafting:
 
 Key Items
 
-    Lockpicks – For locked crates; require iron fragments and power/mass.
+- Lockpicks – For locked crates; require iron fragments and power/mass.
+- Gunpowder – Potassium and ash.
+- Rifle Rounds, 9mm, Shotgun Shells – Requires casings (from copper/zinc), gunpowder.
+- Circuit Boards – Copper, pearls, electronics.
+- Rope – Sinew and cordage.
+- Adhesive – Ash, antlers, medicinal plants.Alloy Sheets – Zinc and iron fragments.
 
-    Gunpowder – Potassium and ash.
+Forge System
 
-    Rifle Rounds, 9mm, Shotgun Shells – Requires casings (from copper/zinc), gunpowder.
+Place raw ore (Iron, Copper, zinc)
 
-    Circuit Boards – Copper, pearls, electronics.
-
-    Rope – Sinew and cordage.
-
-    Adhesive – Ash, antlers, medicinal plants.
-
-    Alloy Sheets – Zinc and iron fragments.
-
-Refinery / Forge System
-
-The Refinery is crafted using power and mass (generated at the BCU). It smelts raw ores into usable fragments.
-Function
-
-    Place raw ore (Iron, Copper, Zinc, etc.)
-
-    Requires electricity to process.
-
-    Produces Iron Fragments, Copper Fragments, etc.
-
-    Crystal Forge (for premium crystal) is accessed in deep caves.
+- Produces Iron Fragments, Copper Fragments, etc.
+- Crystal Forge (for premium crystal) is accessed in deep caves.
 
 Building System
 
-Core Components
+Core Component
 
-    Base Foundation
-
-    Walls (with or without windows)
-
-    Ceilings, Stairs, Doors, Railings
-
-    Glass Walls and Ceilings (later tech)
-
-    Base Command Unit (BCU) – Essential to start base construction.
+- Base Foundation
+- Walls (with or without windows)
+- Ceilings, Stairs, Doors, Railings
+- Glass Walls and Ceilings (later tech)
 
 Building Materials
 
-    Wood Planks – Made from logs.
-
-    Nails – Found in loot crates or crafted from iron.
-
-    Cordage – Made from fiber.
-
-    Metal Scrap – Found in the environment.
+- Wood Planks – Made from logs.
+- Nails – Found in loot crates or crafted from iron.
+- Cordage – Made from fiber.
+- Metal Scrap – Found in the environment.
 
 Building Mechanics
 
 Use "B" key to open the building menu.
 
-    Snap and rotate pieces for precision placement.
-
-    Base pieces can degrade and require repair.
-
-    Can build multi-level structures, greenhouses, and fencing.
-
-    Upgrade walls with alloy sheets to strengthen against attacks.
+- Snap and rotate pieces for precision placement.
+- Can build multi-level structures, greenhouses, and fencing.
+- Upgrade walls with alloy sheets to strengthen against attacks.
 
 Everything You Can Craft (Main List)
 
 Tools
 
-    Axe
-
-    Pickaxe
-
-    Fishing rod
-
-    Bows
-
-    Lockpicks
+Axe
+Pickaxe
+Fishing rod
+Bows
+Lockpicks
 
 Weapons
 
-    Pistol
-
-    Shotgun
-
-    Rifle
-
-    Revolver
-
-    Arrows
-
-    Molotovs
-
-    Grenades
-
+Pistol
+Shotgun
+Rifle
+Revolver
+Arrows
 Ammo
-
-    Rifle rounds
-
-    9mm
-
-    Shotgun shells
-
-    Incendiary arrows (late game)
+Rifle rounds
+9mm
+Shotgun shells 
 
 Survival Items
 
-    Campfire
-
-    Stove
-
-    Water canteens
-
-    Biofuel
+Campfire
+Water canteens
+Biofuel
 
 Base Items
 
-    Base Command Unit Advanced crafting
+Workbench
+Plant bed
 
-    Solar panels
-
-    Woodburner
-
-    Refrigerator
-
-    Refinery
-
-    Workbench
-
-    Animal housing
-
-    Plant beds
-
-    Mass fabricator
-
-    Turrets (late game)
-
-Clothing
-
-    Shirts, jackets, pants, boots
-
-    Tactical vests
-
-    Winter gear
-
-Resource Breakdown for Key Items
-
-Item	Resources Needed
-
-Wood Wall	4 planks, 6 nails, 2 cordage
-Plant Bed	8 planks, 4 scrap, 8 nails
-Rifle Ammo	1 casing, 1 gunpowder
-Rope	3 sinew, 2 cordage
-Adhesive	2 antlers, 3 ash, 1 medicinal herb
-Alloy Sheet	2 zinc fragments, 2 iron fragments
-Solar Panel	6 scrap, 4 circuit boards, 1 adhesive, power/mass
-Lockpick	4 iron fragments, 1 scrap, power and mass (at workbench)
-Animal Housing	10 planks, 12 nails, 10 cordage, 6 scrap, 3 metal ingots
-
-Advanced Systems
-
-    Mass & Power Management – Core to crafting high-end gear.
-
-    Generators – Produce electricity using biofuel.
-
-    Mass Fabricators – Convert power into mass.
-
-    Greenhouses – For year-round farming.
-
-    Freezers & Fridges – Preserve meat and produce.
 	

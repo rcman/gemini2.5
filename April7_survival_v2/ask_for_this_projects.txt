@@ -1,4 +1,4 @@
-write a 3d OPen-World in a third-person using html5 and three.min.js, all js files are local on the web server.  Players must manage hunger, health, and stamina while crafting, building their base from wildlife and hostile AI hunters. The game blends survival with base-building and resource management, providing a tense, immersive solo or co-op experience. The js files need to be split up for easy management. When pressing the key I to open and close the inventory which displays on the screen. There is also a lower quick-bar at the bottom on the screen with 8 slots. Right clicking on an item in the quick-slot moves it to inventory.
+write a 3d OPen-World in a third-person using html5 and three.min.js, all js files are local on the web server.  Players must manage hunger, health, and stamina while crafting, building their base from wildlife and hostile AI hunters. The game blends survival with base-building and resource management, providing a tense, immersive solo or co-op experience. The js files need to be split up for easy management. When pressing the key I to open and close the inventory which displays on the screen. There is also a lower quick-bar at the bottom on the screen with 8 slots. Right clicking on an item in the quick-slot moves it to inventory. Player spawns with an axe, pickaxe, knife and a canteen
 
 Resources Found on the Map
 
@@ -9,15 +9,10 @@ Resources Found on the Map
 - Water – Gathered from lakes, boiled to purify.
 - Medical Plants – Used for biofuel and first aid.
 
-Ore & Mining Resources
+Different Ore & Mining Resources can be found on different rocks.
 
-- Iron Ore – Most common; found on rocks or in caves.
-- Copper Ore – Common for electronics and casings.
-- Potassium Ore – Used in fertilizer and gunpowder.
-- Zinc Ore – Needed for alloy sheets and upgrades.
-- Phosphorus – Found in caves; essential for high-end ammunition.
-- Crystal (Premium Crystals) – Rare; found in deep caves for advanced upgrades.
-- Coal – Also found in caves; used for fuel.
+- Iron Ore – Most common; found on rocks.
+- Copper Ore
 
 Animal Products
 
@@ -25,8 +20,6 @@ Animal Products
 - Leather – From animals, used in crafting clothes.
 - Meat – Cooked for food, spoils if left too long.
 - Feathers – For arrows and gear.
-
-Player Craftable Items
 
 Tools & Survival Gear
 
@@ -39,20 +32,17 @@ Tools & Survival Gear
 
 A Workbench is a craftable item that the player can craft and place in the world. This workbench has its own build menu when accessing it with the letter E.
 
-Items a Creafting Table can make"
+Items that can be make at a Creafting Table.
 
-- Lockpicks – For locked crates; require iron fragments and power/mass.
-- Gunpowder – Potassium and ash.
+- Lockpicks – For locked crates; require iron fragments
 - Rifle Rounds, 9mm, Shotgun Shells – Requires casings (from copper/zinc), gunpowder
 - Rope – Sinew and cordage.
 - nails
 - rope
 
-
 The Forge is craftable by the player and can be placed in the world. It can be accessed with the letter E and has ot's own build menu items
 
 Place raw ore (Iron, Copper, zinc)
-
 - Produces Iron, copper and zinc ingots
 
 Player Building System. Items that can be built and placed in the world by the player. All items listed below snap to each other. Use the mouse wheel to rotate a building item for placement. A foundation needs to put down first in order to add walls to this building. You can remove an item by right clicking on it with your mouse.
@@ -69,4 +59,3 @@ Building Materials
 - Nails – Found in loot crates or crafted from iron.
 - Cordage – Made from fiber.
 - Metal Scrap – Found in the environment.
-

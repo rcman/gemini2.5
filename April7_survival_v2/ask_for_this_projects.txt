@@ -1,13 +1,11 @@
-write a 3d OPen-World in a third-person using html5 and three.min.js, all js files are local on the web server. This open-world survival game set in a hostile wilderness environment. Players must manage hunger, health, and stamina while crafting, building, and defending their base from wildlife and hostile AI hunters. The game blends survival with base-building and resource management, providing a tense, immersive solo or co-op experience. The js files need to be split up for easy management. When pressing the key I to open and close the inventory which displays on the screen. There is also a lower quick-bar at the bottom on the screen with 8 slots. Right clicking on an item in the quick-slot moves it to inventory.
+write a 3d OPen-World in a third-person using html5 and three.min.js, all js files are local on the web server.  Players must manage hunger, health, and stamina while crafting, building their base from wildlife and hostile AI hunters. The game blends survival with base-building and resource management, providing a tense, immersive solo or co-op experience. The js files need to be split up for easy management. When pressing the key I to open and close the inventory which displays on the screen. There is also a lower quick-bar at the bottom on the screen with 8 slots. Right clicking on an item in the quick-slot moves it to inventory.
 
 Resources Found on the Map
 
-The world is rich with resources critical for survival and crafting. These include:
-Natural Resources
 - Wood – Harvested from trees using an axe. Essential for fuel, crafting, and building.
-- Fiber – Found as small plant nodes; used in cordage and clothing.
+- Fiber – Found as smhas all plant nodes; used in cordage and clothing.
 - Vegetables – Wild plants like blueberries, carrots, onions.
-- Animals – Chickens, rabbits (can be captured or hunted), deer, wolves, bears, cougars.
+- Animals – Chickens, rabbits, deer, wolves, bears, cougars.
 - Water – Gathered from lakes, boiled to purify.
 - Medical Plants – Used for biofuel and first aid.
 
@@ -27,19 +25,8 @@ Animal Products
 - Leather – From animals, used in crafting clothes.
 - Meat – Cooked for food, spoils if left too long.
 - Feathers – For arrows and gear.
-- Antlers – From deer; used in adhesive.
 
-Crafting Overview
-
-Crafting is split into:
-
-Basic Inventory Craftin
-
-Workbench Crafting
-
-- Fabricator, Stove, Refinery, and Forge Crafting
-
-Craftable Items in the Player Inventory
+Player Craftable Items
 
 Tools & Survival Gear
 
@@ -50,32 +37,31 @@ Tools & Survival Gear
 - Campfire – For warmth and cooking.
 - Bandages & First Aid Kits – Cloth, medicinal herbs.
 
-The Workbench allows advanced crafting:
+A Workbench is a craftable item that the player can craft and place in the world. This workbench has its own build menu when accessing it with the letter E.
 
-Key Items
+Items a Creafting Table can make"
 
 - Lockpicks – For locked crates; require iron fragments and power/mass.
 - Gunpowder – Potassium and ash.
-- Rifle Rounds, 9mm, Shotgun Shells – Requires casings (from copper/zinc), gunpowder.
-- Circuit Boards – Copper, pearls, electronics.
+- Rifle Rounds, 9mm, Shotgun Shells – Requires casings (from copper/zinc), gunpowder
 - Rope – Sinew and cordage.
-- Adhesive – Ash, antlers, medicinal plants.Alloy Sheets – Zinc and iron fragments.
+- nails
+- rope
 
-Forge System
+
+The Forge is craftable by the player and can be placed in the world. It can be accessed with the letter E and has ot's own build menu items
 
 Place raw ore (Iron, Copper, zinc)
 
-- Produces Iron Fragments, Copper Fragments, etc.
-- Crystal Forge (for premium crystal) is accessed in deep caves.
+- Produces Iron, copper and zinc ingots
 
-Building System
-
-Core Component
+Player Building System. Items that can be built and placed in the world by the player. All items listed below snap to each other. Use the mouse wheel to rotate a building item for placement. A foundation needs to put down first in order to add walls to this building. You can remove an item by right clicking on it with your mouse.
 
 - Base Foundation
-- Walls (with or without windows)
+- Walls
+- Walls with Windows
 - Ceilings, Stairs, Doors, Railings
-- Glass Walls and Ceilings (later tech)
+- use B to open and close the build menu.
 
 Building Materials
 
@@ -84,45 +70,3 @@ Building Materials
 - Cordage – Made from fiber.
 - Metal Scrap – Found in the environment.
 
-Building Mechanics
-
-Use "B" key to open the building menu.
-
-- Snap and rotate pieces for precision placement.
-- Can build multi-level structures, greenhouses, and fencing.
-- Upgrade walls with alloy sheets to strengthen against attacks.
-
-Everything You Can Craft (Main List)
-
-Tools
-
-Axe
-Pickaxe
-Fishing rod
-Bows
-Lockpicks
-
-Weapons
-
-Pistol
-Shotgun
-Rifle
-Revolver
-Arrows
-Ammo
-Rifle rounds
-9mm
-Shotgun shells 
-
-Survival Items
-
-Campfire
-Water canteens
-Biofuel
-
-Base Items
-
-Workbench
-Plant bed
-
-	

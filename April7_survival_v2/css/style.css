@@ -1,0 +1,217 @@
+/* css/style.css */
+
+/* Basic Body/HTML */
+body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    font-family: sans-serif;
+    color: white;
+    background-color: #000; /* Fallback background */
+}
+
+/* Game Container */
+#game-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+}
+
+canvas {
+    display: block; /* Prevent extra space */
+}
+
+/* UI Overlay Container */
+#ui-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks to pass through to canvas by default */
+    z-index: 10;
+}
+
+/* Allow pointer events on specific UI elements */
+#ui-overlay > div, #ui-overlay button, #ui-overlay ul, #ui-overlay li {
+    pointer-events: auto;
+}
+
+/* Player Stats */
+#player-stats {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 8px;
+    border-radius: 5px;
+    font-size: 14px;
+}
+
+/* Interaction Prompt (Center Screen) */
+#interaction-prompt {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 5px 10px;
+    border-radius: 3px;
+    display: none; /* Initially hidden */
+    font-size: 16px;
+    text-align: center;
+}
+
+/* Message Log (Bottom Center) */
+#message-log {
+    position: absolute;
+    bottom: 75px; /* Position above quick bar */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 5px 15px;
+    border-radius: 5px;
+    font-size: 14px;
+    min-width: 150px;
+    text-align: center;
+}
+
+/* General Menu Panel Style */
+.menu-panel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(20, 20, 20, 0.85);
+    border: 1px solid #555;
+    padding: 20px;
+    border-radius: 8px;
+    min-width: 300px;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    display: none; /* Hidden by default */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+.menu-panel h2 {
+    margin-top: 0;
+    text-align: center;
+    color: #eee;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.menu-panel ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.menu-panel li {
+    padding: 5px 0;
+    margin-bottom: 5px;
+}
+
+.menu-panel button {
+    padding: 8px 12px;
+    background-color: #444;
+    border: 1px solid #666;
+    color: white;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.menu-panel button:hover {
+    background-color: #555;
+}
+
+/* Specific Menu Styles */
+#inventory-menu li {
+    padding: 8px 5px;
+    border-bottom: 1px dashed #333;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+#inventory-menu li:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+#inventory-menu li:last-child {
+    border-bottom: none;
+}
+
+.menu-hint {
+    font-size: 0.8em;
+    color: #aaa;
+    text-align: center;
+    margin-top: 15px;
+}
+
+
+/* Quick Bar Styles */
+#quick-bar {
+    position: fixed; /* Use fixed to ensure it stays relative to viewport */
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px;
+    border-radius: 5px;
+    z-index: 10; /* Ensure it's above game canvas */
+    pointer-events: auto; /* Allow interaction with the quick bar itself */
+}
+
+.quick-slot {
+    width: 55px; /* Slightly larger */
+    height: 55px;
+    border: 1px solid #aaa;
+    margin: 3px;
+    background-color: rgba(50, 50, 50, 0.7);
+    color: white;
+    display: flex;
+    flex-direction: column; /* Arrange name and quantity */
+    justify-content: space-between; /* Push quantity to bottom */
+    align-items: center;
+    font-size: 11px; /* Slightly larger font */
+    padding: 3px;
+    box-sizing: border-box; /* Include padding/border in size */
+    cursor: pointer;
+    user-select: none; /* Prevent text selection */
+    overflow: hidden; /* Hide overflow text */
+    text-align: center;
+    position: relative; /* Needed for absolute positioning of quantity */
+}
+
+.quick-slot .item-name {
+    flex-grow: 1; /* Allow name to take space */
+    display: flex;
+    align-items: center; /* Center name vertically */
+    justify-content: center; /* Center name horizontally */
+    width: 100%;
+    padding-bottom: 10px; /* Make space for quantity */
+}
+
+.quick-slot .item-quantity {
+    position: absolute; /* Position relative to slot */
+    bottom: 2px;
+    right: 4px;
+    font-weight: bold;
+    font-size: 13px;
+    background-color: rgba(0, 0, 0, 0.5); /* Slight background for readability */
+    padding: 0 3px;
+    border-radius: 2px;
+}
+
+/* Style for selected quick slot (Example - needs Player logic to set a class) */
+/*
+.quick-slot.selected {
+    border: 2px solid yellow;
+}
+*/

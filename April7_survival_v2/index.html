@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Survival Game Concept</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* Basic CSS Reset */
+        body, html { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+        #game-container { width: 100vw; height: 100vh; display: block; }
+        canvas { display: block; } /* Remove potential extra space below canvas */
+    </style>
+</head>
+<body>
+    <!-- Game Canvas Container -->
+    <div id="game-container"></div>
+
+    <!-- UI Overlay Elements -->
+    <div id="ui-overlay">
+        <!-- Player Stats -->
+        <div id="player-stats">
+            <div>Health: <span id="health-value">100</span></div>
+            <div>Hunger: <span id="hunger-value">100</span></div>
+            <div>Stamina: <span id="stamina-value">100</span></div>
+        </div>
+
+        <!-- Interaction Prompt -->
+        <div id="interaction-prompt">[E] Interact</div>
+
+        <!-- Message Log -->
+        <div id="message-log">Welcome!</div>
+
+        <!-- Inventory Menu (Initially Hidden) -->
+        <div id="inventory-menu" class="menu-panel">
+            <h2>Inventory</h2>
+            <ul id="inventory-list">
+                <li>Empty</li>
+            </ul>
+            <p class="menu-hint">Click item to move to quick bar.</p>
+            <p class="menu-hint">Press [I] to close.</p>
+        </div>
+
+        <!-- Build Menu (Initially Hidden) -->
+        <div id="build-menu" class="menu-panel">
+            <h2>Build Menu</h2>
+            <ul>
+                <!-- Add buildable items here -->
+                <li><button onclick="Building.placeItem('foundation')">Foundation (W:4, S:2)</button></li>
+                <li><button onclick="Building.placeItem('wall')">Wall (W:2)</button></li>
+                <li><button onclick="Building.placeItem('campfire')">Campfire (W:5, F:2)</button></li>
+                <!-- Add more build options -->
+            </ul>
+             <p class="menu-hint">Press [B] to close.</p>
+        </div>
+
+        <!-- Quick Bar -->
+        <div id="quick-bar">
+            <div class="quick-slot" data-slot-index="0"></div>
+            <div class="quick-slot" data-slot-index="1"></div>
+            <div class="quick-slot" data-slot-index="2"></div>
+            <div class="quick-slot" data-slot-index="3"></div>
+            <div class="quick-slot" data-slot-index="4"></div>
+            <div class="quick-slot" data-slot-index="5"></div>
+            <div class="quick-slot" data-slot-index="6"></div>
+            <div class="quick-slot" data-slot-index="7"></div>
+        </div>
+
+    </div>
+
+    <!-- Libraries -->
+    <script src="js/lib/three.min.js"></script>
+    <!-- Add other libs like OrbitControls if needed -->
+
+    <!-- Game Scripts (Order Matters!) -->
+    <script src="js/constants.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/resources.js"></script> <!-- Resources before Inventory/Crafting -->
+    <script src="js/crafting.js"></script> <!-- Crafting before Inventory uses its recipes -->
+    <script src="js/inventory.js"></script> <!-- Inventory before Player/UI -->
+    <script src="js/ui.js"></script>      <!-- UI Manager -->
+    <script src="js/interaction.js"></script>
+    <script src="js/player.js"></script>   <!-- Player requires Input, Engine, UI, Inventory, Interaction -->
+    <script src="js/ai.js"></script>       <!-- AI requires Engine -->
+    <script src="js/world.js"></script>    <!-- World requires Engine, Resources, Inventory, AI -->
+    <script src="js/building.js"></script> <!-- Building requires Engine, Input, Inventory, UI, World -->
+    <script src="js/main.js"></script>     <!-- Main initializes everything -->
+
+</body>
+</html>

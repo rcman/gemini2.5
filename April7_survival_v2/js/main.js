@@ -17,46 +17,47 @@ const Game = {
 
         // --- Core Systems First ---
         this.Engine.init();
-        this.Input.init(); // Input needed early
-        this.Resources.init(); // Resource definitions needed by others
-        // Assuming CONSTANTS doesn't need an init, but added placeholder if it ever does
-        // window.CONSTANTS?.init?.(); // Optional chaining in case CONSTANTS might get an init later
+        this.Input.init();
+        this.Resources.init();
 
         // --- UI Manager BEFORE modules that use it ---
-        this.UIManager.init(); // Initialize UI elements BEFORE Inventory/Player use them
+        this.UIManager.init();
 
         // --- Game Logic Systems ---
-        this.Crafting.init();   // Depends on Constants/Resources
-        this.Inventory.init();  // Depends on UI, Constants, Resources, Crafting
-        this.Interaction.init(); // Interaction system
+        this.Crafting.init();
+        this.Inventory.init(); // Inventory initialized HERE
+        this.Interaction.init();
 
         // --- Player & World ---
-        this.Player.init(this.Engine.camera); // Player uses many systems (Input, UI, Inventory, Interaction)
-        this.AI.init();         // AI system (might use Player pos later)
-        this.World.init();      // World uses AI, Resources, Interaction, adds objects
+        this.Player.init(this.Engine.camera);
+        this.AI.init();
+        this.World.init();
 
         // --- Building System ---
-        this.Building.init();   // Building uses many systems (Input, UI, Inventory, World, Player)
+        this.Building.init();
 
         // --- Setup Connections & Starting State ---
-        this.UIManager.setupBuildMenuButtons(); // Link build menu buttons AFTER UI and Building are ready
+        this.UIManager.setupBuildMenuButtons();
 
-        // *** ADD STARTING ITEMS HERE ***
-        // Now that Inventory AND UIManager are initialized, adding items will update the UI correctly.
+        // *** ADD STARTING INVENTORY ITEMS HERE ***
         console.log("Adding starting resources...");
-        this.Inventory.addItem('wood', 100);
-        this.Inventory.addItem('stone', 100);
-        this.Inventory.addItem('fiber', 100);
-        // Add some buildable items for testing placement
-        this.Inventory.addItem('foundation', 5);
-        this.Inventory.addItem('wall', 10);
-        this.Inventory.addItem('wall_doorway', 2);
-        this.Inventory.addItem('wall_window', 2); // Added starting window walls
-        this.Inventory.addItem('door', 2);
-        // *** END ADD STARTING ITEMS ***
+        this.Inventory.addItem('wood', 100); // Added to main inventory
+        this.Inventory.addItem('stone', 100); // Added to main inventory
+        this.Inventory.addItem('fiber', 100); // Added to main inventory
+        this.Inventory.addItem('foundation', 5); // Added to main inventory
+        this.Inventory.addItem('wall', 10); // Added to main inventory
+        this.Inventory.addItem('wall_doorway', 2); // Added to main inventory
+        this.Inventory.addItem('wall_window', 2); // Added to main inventory
+        this.Inventory.addItem('door', 2); // Added to main inventory
+        // *** END STARTING INVENTORY ITEMS ***
 
-        // Player.init already calls updateStatsUI, so this is likely redundant
-        // this.Player.updateStatsUI();
+        // *** ADD STARTING QUICK BAR ITEMS ***
+        console.log("Adding starting quick bar items...");
+        this.Inventory.addToQuickBar({ itemId: 'axe', quantity: 1 }, 0);     // Axe in Slot 1 (index 0)
+        this.Inventory.addToQuickBar({ itemId: 'pickaxe', quantity: 1 }, 1); // Pickaxe in Slot 2 (index 1)
+        this.Inventory.addToQuickBar({ itemId: 'knife', quantity: 1 }, 2);    // Knife in Slot 3 (index 2)
+        this.Inventory.addToQuickBar({ itemId: 'canteen', quantity: 1 }, 3);  // Canteen in Slot 4 (index 3)
+        // *** END STARTING QUICK BAR ITEMS ***
 
         console.log("Game Initialization Complete. Starting Loop.");
         this.gameLoop(); // Start the main game loop
@@ -69,33 +70,29 @@ const Game = {
         const deltaTime = this.Engine.clock.getDelta(); // Get time elapsed since last frame
 
         // --- Update Systems ---
-        // Order can matter here (e.g., update Player before AI uses Player position)
-        this.Player.update(deltaTime, this.World.objects); // Player logic, movement, input handling
-        this.AI.update(deltaTime, this.Player.getPosition()); // AI behavior
-        this.World.update(deltaTime); // Update any dynamic world elements (none currently)
+        this.Player.update(deltaTime, this.World.objects);
+        this.AI.update(deltaTime, this.Player.getPosition());
+        this.World.update(deltaTime);
 
         // Update Building System ghost placement IF active
         if (Building.isPlacing) {
-            Building.updatePlacementGhost(this.Engine.camera, this.World.ground); // Update ghost position/rotation/validity
+            Building.updatePlacementGhost(this.Engine.camera, this.World.ground);
         }
 
         // --- Reset Inputs AFTER updates ---
-        // Player.update resets mouse movement deltas via Input.resetMouseDeltas() inside its logic
-        Input.resetMouseWheelDelta(); // Reset wheel delta each frame
+        Input.resetMouseWheelDelta();
 
         // --- Render Scene ---
-        this.Engine.render(); // Draw the scene from the camera's perspective
+        this.Engine.render();
     }
 };
 
 // Start the game once the DOM is ready and all scripts are loaded
 window.addEventListener('DOMContentLoaded', () => {
-    // Ensure THREE is loaded (optional check, script order should handle this)
     if (typeof THREE === 'undefined') {
         console.error("THREE.js library not loaded!");
         return;
     }
-    // Make sure CONSTANTS is available (it should be if script order is correct)
     if (typeof CONSTANTS === 'undefined') {
         console.error("CONSTANTS script not loaded or executed before main.js!");
         return;

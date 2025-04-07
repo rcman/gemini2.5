@@ -34,8 +34,8 @@ canvas {
     z-index: 10;
 }
 
-/* Allow pointer events on specific UI elements */
-#ui-overlay > div, #ui-overlay button, #ui-overlay ul, #ui-overlay li {
+/* Allow pointer events on specific UI elements that need interaction */
+#ui-overlay > div, #ui-overlay button, #ui-overlay ul, #ui-overlay li, #quick-bar, .quick-slot {
     pointer-events: auto;
 }
 
@@ -75,7 +75,11 @@ canvas {
     border-radius: 5px;
     font-size: 14px;
     min-width: 150px;
+    max-width: 80%;
     text-align: center;
+    white-space: nowrap; /* Prevent wrapping for short messages */
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* General Menu Panel Style */
@@ -84,7 +88,7 @@ canvas {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background-color: rgba(20, 20, 20, 0.85);
+    background-color: rgba(20, 20, 20, 0.9); /* Slightly less transparent */
     border: 1px solid #555;
     padding: 20px;
     border-radius: 8px;
@@ -126,18 +130,23 @@ canvas {
     text-align: left;
     border-radius: 4px;
     transition: background-color 0.2s ease;
+    box-sizing: border-box; /* Ensure padding included in width */
 }
 
 .menu-panel button:hover {
     background-color: #555;
 }
+.menu-panel button:active {
+    background-color: #333;
+}
+
 
 /* Specific Menu Styles */
 #inventory-menu li {
     padding: 8px 5px;
     border-bottom: 1px dashed #333;
-    cursor: pointer;
     transition: background-color 0.2s ease;
+    /* cursor is set dynamically in ui.js */
 }
 #inventory-menu li:hover {
     background-color: rgba(255, 255, 255, 0.1);
@@ -156,7 +165,7 @@ canvas {
 
 /* Quick Bar Styles */
 #quick-bar {
-    position: fixed; /* Use fixed to ensure it stays relative to viewport */
+    position: fixed;
     bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
@@ -165,53 +174,61 @@ canvas {
     padding: 5px;
     border-radius: 5px;
     z-index: 10; /* Ensure it's above game canvas */
-    pointer-events: auto; /* Allow interaction with the quick bar itself */
 }
 
 .quick-slot {
-    width: 55px; /* Slightly larger */
+    width: 55px;
     height: 55px;
     border: 1px solid #aaa;
     margin: 3px;
     background-color: rgba(50, 50, 50, 0.7);
     color: white;
     display: flex;
-    flex-direction: column; /* Arrange name and quantity */
-    justify-content: space-between; /* Push quantity to bottom */
+    flex-direction: column;
+    justify-content: space-between;
     align-items: center;
-    font-size: 11px; /* Slightly larger font */
+    font-size: 11px;
     padding: 3px;
-    box-sizing: border-box; /* Include padding/border in size */
+    box-sizing: border-box;
     cursor: pointer;
-    user-select: none; /* Prevent text selection */
-    overflow: hidden; /* Hide overflow text */
+    user-select: none;
+    overflow: hidden;
     text-align: center;
-    position: relative; /* Needed for absolute positioning of quantity */
+    position: relative;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease; /* Smooth selection */
 }
 
 .quick-slot .item-name {
-    flex-grow: 1; /* Allow name to take space */
+    flex-grow: 1;
     display: flex;
-    align-items: center; /* Center name vertically */
-    justify-content: center; /* Center name horizontally */
+    align-items: center;
+    justify-content: center;
     width: 100%;
-    padding-bottom: 10px; /* Make space for quantity */
+    padding-bottom: 10px;
+    line-height: 1.1; /* Prevent tall characters pushing quantity */
+    word-break: break-word; /* Break long names */
 }
 
 .quick-slot .item-quantity {
-    position: absolute; /* Position relative to slot */
+    position: absolute;
     bottom: 2px;
     right: 4px;
     font-weight: bold;
     font-size: 13px;
-    background-color: rgba(0, 0, 0, 0.5); /* Slight background for readability */
+    background-color: rgba(0, 0, 0, 0.5);
     padding: 0 3px;
     border-radius: 2px;
 }
 
-/* Style for selected quick slot (Example - needs Player logic to set a class) */
-/*
+/* Selection Highlight Styles */
 .quick-slot.selected {
     border: 2px solid yellow;
+    box-shadow: 0 0 8px yellow; /* Slightly softer glow */
 }
-*/
+
+#inventory-menu li.selected {
+    background-color: rgba(255, 255, 100, 0.2); /* Yellowish highlight */
+    font-weight: bold;
+    border-left: 3px solid yellow; /* Add side indicator */
+    padding-left: 2px; /* Adjust padding for border */
+}

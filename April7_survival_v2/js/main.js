@@ -1,6 +1,4 @@
 // js/main.js
-
-// Use a global object to hold game state/modules if not using ES6 modules
 const Game = {
     Engine: window.Engine,
     Input: window.Input,
@@ -19,15 +17,16 @@ const Game = {
 
         this.Engine.init();
         this.Input.init();
-        this.Resources.init(); // Load resource defs
-        this.Inventory.init(); // Init inventory before crafting/player
-        this.Crafting.init();
+        this.Resources.init();
+        this.Crafting.init(); // Crafting before Inventory uses its recipes
+        this.Inventory.init();
         this.Interaction.init();
-        this.Player.init(this.Engine.camera); // Player needs camera ref
-        this.AI.init(); // AI before World if World spawns AI immediately
-        this.World.init();   // World spawns ground, resources, static objects
-        this.Building.init();
-        this.UIManager.init(); // UI last, might read initial values
+        this.Player.init(this.Engine.camera);
+        this.AI.init();
+        this.World.init();
+        this.Building.init(); // Building before UI uses its functions
+        this.UIManager.init();
+        this.UIManager.setupBuildMenuButtons(); // <<< Link build menu buttons AFTER UI and Building are ready
 
         console.log("Game Initialization Complete. Starting Loop.");
         this.gameLoop(); // Start the loop
@@ -40,16 +39,14 @@ const Game = {
         const deltaTime = this.Engine.clock.getDelta();
 
         // Update Systems
-        // Pass necessary data between systems
-        this.Player.update(deltaTime, this.World.objects); // Player needs delta and colliders
-        this.AI.update(deltaTime, this.Player.getPosition()); // AI needs player position
+        this.Player.update(deltaTime, this.World.objects);
+        this.AI.update(deltaTime, this.Player.getPosition());
         this.World.update(deltaTime); // Update world dynamics (if any)
 
-         // Update Building System ghost placement if active
-         if (this.Building.isBuilding) {
-             this.Building.update(this.Engine.camera, this.World.ground);
+         // Update Building System ghost placement IF active
+         if (Building.isPlacing) { // <<< Use the new flag
+             Building.updatePlacementGhost(this.Engine.camera, this.World.ground); // <<< Use the new function
          }
-
 
         // Render Scene
         this.Engine.render();

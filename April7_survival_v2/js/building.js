@@ -1,197 +1,246 @@
 // js/building.js
 const Building = {
-    isBuilding: false,
-    ghostObject: null, // The transparent preview object
+    isPlacing: false, // Changed from isBuilding
+    ghostObject: null,
     buildMaterialValid: null,
     buildMaterialInvalid: null,
-    currentBuildItem: null, // e.g., { id: 'foundation', cost: { wood: 10 }, size: [4, 0.2, 4] }
-    gridSnapSize: 1.0, // Snap to 1-meter grid (adjust as needed)
+    currentItemInfo: null, // { itemId: string, source: 'inventory' | 'quickbar', slotIndex?: number }
+    gridSnapSize: 1.0,
 
     init: function() {
         this.buildMaterialValid = new THREE.MeshBasicMaterial({ color: 0x00FF00, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
         this.buildMaterialInvalid = new THREE.MeshBasicMaterial({ color: 0xFF0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-        console.log("Building System Initialized");
+        console.log("Building System Initialized (Placement Mode)");
     },
 
-    enterBuildMode: function(itemId) {
-         // Define buildable items data (could be moved to constants.js)
-         const buildables = {
-             'foundation': { cost: { wood: 4, stone: 2 }, geometry: new THREE.BoxGeometry(4, 0.2, 4) },
-             'wall': { cost: { wood: 2 }, geometry: new THREE.BoxGeometry(4, 3, 0.2) },
-             'campfire': { cost: { wood: 5, fiber: 2}, geometry: new THREE.CylinderGeometry(0.5, 0.5, 0.3, 12)}
-             // Add more items...
-         };
-
-        if (!buildables[itemId]) {
-            console.warn("Unknown build item:", itemId);
+    // Called by UI when an item is selected for placement
+    startPlacement: function(itemInfo) {
+        const buildableData = CONSTANTS.BUILDABLES[itemInfo.itemId];
+        if (!buildableData) {
+            console.warn("Unknown buildable item selected for placement:", itemInfo.itemId);
             return;
         }
-        const itemData = buildables[itemId];
 
-        // Check if player has resources (optional preview check)
-        // if (!Inventory.hasItems(itemData.cost)) {
-        //     Game.UIManager.logMessage(`Not enough resources for ${itemId}`);
-        //     return;
-        // }
+        // Check if player actually has the item (important!)
+        if (Inventory.getItemCount(itemInfo.itemId) < 1) {
+             Game.UIManager.logMessage(`You don't have any ${buildableData.name} to place.`);
+             this.cancelPlacement(); // Ensure we exit any prior placement state
+             return;
+        }
 
-        this.isBuilding = true;
-        this.currentBuildItem = { id: itemId, ...itemData }; // Store item details
+        this.currentItemInfo = itemInfo;
+        this.isPlacing = true;
 
         // Create ghost object
         if (this.ghostObject) Engine.scene.remove(this.ghostObject);
-        this.ghostObject = new THREE.Mesh(itemData.geometry, this.buildMaterialValid); // Start with valid material
-        this.ghostObject.userData.isGhost = true; // Mark as ghost
+        this.ghostObject = new THREE.Mesh(buildableData.geometry.clone(), this.buildMaterialValid); // Use cloned geometry
+        this.ghostObject.userData.isGhost = true;
         Engine.scene.add(this.ghostObject);
 
-        Game.UIManager.logMessage(`Building: ${itemId}. Left click to place, Right click to cancel.`);
-        console.log("Entered build mode for:", itemId);
+        Game.UIManager.logMessage(`Placing: ${buildableData.name}. Left click to place, Right click to cancel.`);
+        console.log("Entered placement mode for:", itemInfo.itemId);
+
+        // Ensure pointer lock is active for placement aiming
+        if (!Input.isPointerLocked) {
+            document.body.requestPointerLock();
+        }
     },
 
-    exitBuildMode: function() {
+    cancelPlacement: function() {
+        this.clearGhostObject();
+        this.isPlacing = false;
+        const lastItemInfo = this.currentItemInfo; // Store before clearing
+        this.currentItemInfo = null;
+        Player.clearSelection(); // Tell player they are no longer selecting an item
+        Game.UIManager.clearSelectionHighlights(); // Remove UI highlights
+
+        // Only log cancellation if we were actually placing something meaningful
+        if (lastItemInfo) {
+            console.log("Exited placement mode");
+            Game.UIManager.logMessage("Placement cancelled.");
+        }
+    },
+
+    clearGhostObject: function() {
         if (this.ghostObject) {
             Engine.scene.remove(this.ghostObject);
-            // Dispose geometry/material if created dynamically and not reused
+            // Consider disposing geometry/material if performance becomes an issue
             // this.ghostObject.geometry.dispose();
         }
         this.ghostObject = null;
-        this.isBuilding = false;
-        this.currentBuildItem = null;
-        console.log("Exited build mode");
-         Game.UIManager.logMessage("Exited build mode.");
     },
 
-    update: function(camera, groundPlane) {
-        if (!this.isBuilding || !this.ghostObject || !camera || !groundPlane) return;
+    // Called by the main game loop (in main.js)
+    updatePlacementGhost: function(camera, groundPlane) {
+        if (!this.isPlacing || !this.ghostObject || !camera || !groundPlane) return;
 
-        // Raycast from camera to find placement position on the ground
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera({ x: 0, y: 0 }, camera); // Center of screen
 
-        const intersects = raycaster.intersectObject(groundPlane); // Intersect only with ground for now
+        // Raycast against ground AND potentially other placed building objects for vertical stacking
+        const targets = [groundPlane, ...World.objects.filter(o => o.userData?.isBuilding)]; // Include ground and buildings
+        const intersects = raycaster.intersectObjects(targets, false); // Don't recurse children
 
         if (intersects.length > 0) {
-            const intersectPoint = intersects[0].point;
+            const intersect = intersects[0];
+            const intersectPoint = intersect.point;
+            const targetObject = intersect.object;
 
-            // Apply grid snapping
             let placeX = Math.round(intersectPoint.x / this.gridSnapSize) * this.gridSnapSize;
-            let placeY = intersectPoint.y; // Use intersect Y, adjust based on object height later
+            let placeY = intersectPoint.y;
             let placeZ = Math.round(intersectPoint.z / this.gridSnapSize) * this.gridSnapSize;
 
-            // Adjust Y based on object's height to place it ON the ground/surface
-             if (this.currentBuildItem.geometry.parameters) {
-                  const height = this.currentBuildItem.geometry.parameters.height || 0;
-                  placeY += height / 2; // Place center at height/2 above ground
-             } else {
-                 // Default for non-box geometries (like campfire cylinder)
-                 placeY += 0.15; // Small offset for campfire
+            const buildableData = CONSTANTS.BUILDABLES[this.currentItemInfo.itemId];
+            let objectHeight = 0;
+            if (buildableData && buildableData.geometry.parameters) {
+                 objectHeight = buildableData.geometry.parameters.height || 0;
+             } else if (buildableData && buildableData.geometry instanceof THREE.CylinderGeometry) {
+                 objectHeight = buildableData.geometry.parameters.height || 0; // Cylinder also has height
              }
 
+             // Adjust Y based on the target surface
+             if (targetObject === groundPlane) {
+                 placeY = intersectPoint.y + objectHeight / 2; // Place on ground
+             } else if (targetObject.userData?.isBuilding) {
+                 // Snap to top of existing building piece (approximate)
+                 const targetBox = new THREE.Box3().setFromObject(targetObject);
+                 placeY = targetBox.max.y + objectHeight / 2;
+             } else {
+                  // Default for unexpected targets (shouldn't happen with current filter)
+                  placeY = intersectPoint.y + objectHeight / 2;
+             }
+
+            // --- Rotation Handling (Example: Use R key) ---
+            if (Input.keys['r']) {
+                this.ghostObject.rotation.y += Math.PI / 2; // Rotate 90 degrees
+                 // Clamp rotation to prevent floating point issues with checks
+                 this.ghostObject.rotation.y = Math.round(this.ghostObject.rotation.y / (Math.PI / 2)) * (Math.PI / 2);
+                Input.keys['r'] = false; // Consume key press
+            }
+            // --- End Rotation ---
 
             this.ghostObject.position.set(placeX, placeY, placeZ);
-
-            // TODO: Add collision checks here
-            // Check if ghostObject overlaps with other world objects (trees, rocks, other buildings)
-            const canPlace = this.checkPlacementValidity(this.ghostObject.position);
+            const canPlace = this.checkPlacementValidity(this.ghostObject); // Pass ghost itself
             this.ghostObject.material = canPlace ? this.buildMaterialValid : this.buildMaterialInvalid;
 
-        }
-
-        // Handle Placement Input (Left Click)
-        if (Input.mouse.left) {
-            this.placeCurrentItem();
-            Input.mouse.left = false; // Consume click
-        }
-
-         // Handle Cancellation (Right Click)
-        if (Input.mouse.right) {
-             this.exitBuildMode();
-             Input.mouse.right = false; // Consume click
+        } else {
+            // Optionally hide or move the ghost far away if not pointing at a valid target
+             if(this.ghostObject) {
+                 this.ghostObject.position.set(0,-1000,0); // Hide it
+                 this.ghostObject.material = this.buildMaterialInvalid; // Mark as invalid when hidden
+             }
         }
     },
 
-     checkPlacementValidity: function(position) {
-         // TODO: Implement actual collision checks
-         // For now, just assume it's valid if on the ground plane raycast hit
-         if(this.ghostObject.position.y < 0.01) return false; // Don't place underground
+     checkPlacementValidity: function(ghost) { // Pass the ghost object itself
+         if (!ghost) return false;
+         if(ghost.position.y < 0.01) return false; // Check if underground (adjust based on lowest buildable point)
 
-         // Basic check against existing world objects (very inefficient - use spatial hashing later)
-         const ghostBox = new THREE.Box3().setFromObject(this.ghostObject);
+         const ghostBox = new THREE.Box3().setFromObject(ghost);
+
+         // Check against world objects (trees, rocks, other buildings)
          for(const obj of World.objects) {
-              if(obj === this.ghostObject || obj.userData?.isGhost) continue; // Don't collide with self or other ghosts
-              const objBox = new THREE.Box3().setFromObject(obj);
-              if(ghostBox.intersectsBox(objBox)) {
-                  // console.log("Placement blocked by:", obj.name);
-                  return false; // Collision detected
+              if(obj === ghost || obj.userData?.isGhost) continue; // Don't check self
+              if(obj.geometry) { // Ensure object has geometry to calculate bounding box
+                   const objBox = new THREE.Box3().setFromObject(obj);
+                   if(ghostBox.intersectsBox(objBox)) {
+                        // Optional: Allow minor overlap for snapping? Needs more complex logic.
+                       // console.log("Collision with World Object:", obj.name);
+                       return false;
+                   }
               }
          }
-          for(const agent of AI.agents) { // Also check AI agents
-              const agentBox = new THREE.Box3().setFromObject(agent);
-              if(ghostBox.intersectsBox(agentBox)) {
-                  // console.log("Placement blocked by AI:", agent.name);
-                  return false;
-              }
-         }
-
+          // Check against AI agents
+          for(const agent of AI.agents) {
+               if(agent.geometry) {
+                   const agentBox = new THREE.Box3().setFromObject(agent);
+                   if(ghostBox.intersectsBox(agentBox)) {
+                        // console.log("Collision with AI:", agent.name);
+                       return false;
+                   }
+               }
+          }
+         // Check against player (optional, prevent building inside player)
+         // const playerBox = new THREE.Box3().setFromObject(Player.mesh);
+         // if(ghostBox.intersectsBox(playerBox)) {
+         //      // console.log("Collision with Player");
+         //      return false;
+         // }
 
          return true; // No collision found
      },
 
-    placeCurrentItem: function() {
-        if (!this.isBuilding || !this.currentBuildItem || !this.ghostObject) return;
+    // Called by Player.update when left-click occurs during placement
+    placeSelectedItem: function() {
+        if (!this.isPlacing || !this.currentItemInfo || !this.ghostObject) return;
 
-        // Final check for validity and resources
+        // Final validity check
         if (this.ghostObject.material === this.buildMaterialInvalid) {
             Game.UIManager.logMessage("Cannot place item here!");
             return;
         }
-        if (!Inventory.hasItems(this.currentBuildItem.cost)) {
-            Game.UIManager.logMessage(`Not enough resources for ${this.currentBuildItem.id}`);
-             this.exitBuildMode(); // Exit build mode if out of resources
-            return;
+
+        // Consume one item from inventory/quickbar
+        const consumed = Inventory.consumeItemForPlacement(this.currentItemInfo);
+
+        if (consumed) {
+            // Create the real object
+            const buildableData = CONSTANTS.BUILDABLES[this.currentItemInfo.itemId];
+             const placedMaterial = new THREE.MeshLambertMaterial({
+                 color: (this.currentItemInfo.itemId === 'campfire' ? 0x404040 : 0xA0522D) // Example colors based on type
+             });
+
+            const placedObject = new THREE.Mesh(buildableData.geometry.clone(), placedMaterial);
+            placedObject.position.copy(this.ghostObject.position);
+            placedObject.rotation.copy(this.ghostObject.rotation); // Copy rotation
+            placedObject.castShadow = true;
+            placedObject.receiveShadow = true;
+            placedObject.name = buildableData.name; // Use proper name
+             placedObject.userData = {
+                 isBuilding: true, // Mark as a constructed object
+                 // Add health, owner etc. later
+             };
+
+            World.addWorldObject(placedObject, false, true); // Add to world as collider
+            Game.UIManager.logMessage(`Placed ${buildableData.name}!`);
+            console.log(`Placed ${buildableData.name} at`, placedObject.position);
+
+            // Check if player ran out of this item
+            if (Inventory.getItemCount(this.currentItemInfo.itemId) < 1) {
+                Game.UIManager.logMessage(`No more ${buildableData.name} left.`);
+                this.cancelPlacement(); // Automatically exit placement mode
+            }
+             // Otherwise, stay in placement mode to place the next one
+        } else {
+            // This should theoretically not happen if startPlacement checks correctly, but handle anyway
+            Game.UIManager.logMessage(`Failed to place ${this.currentItemInfo.itemId} (Item not found?).`);
+            this.cancelPlacement();
         }
-
-        // Consume resources
-        for (const itemId in this.currentBuildItem.cost) {
-            Inventory.removeItem(itemId, this.currentBuildItem.cost[itemId]);
-        }
-
-        // Create the real object
-        // Use a standard material for placed objects
-        const placedMaterial = new THREE.MeshLambertMaterial({ color: 0xA0522D }); // Wood color for example
-        if (this.currentBuildItem.id === 'campfire') {
-             placedMaterial.color.setHex(0x404040); // Grey for campfire
-        }
-        // Clone geometry to avoid issues if the original is modified
-        const placedObject = new THREE.Mesh(this.currentBuildItem.geometry.clone(), placedMaterial);
-        placedObject.position.copy(this.ghostObject.position);
-        placedObject.rotation.copy(this.ghostObject.rotation); // Copy rotation if implemented
-        placedObject.castShadow = true;
-        placedObject.receiveShadow = true;
-        placedObject.name = this.currentBuildItem.id;
-         placedObject.userData = {
-             isBuilding: true,
-             // Add health, interaction points etc. later
-         };
-
-        // Add to the world
-        World.addWorldObject(placedObject, false, true); // Add as collider, not interactable by default
-
-        Game.UIManager.logMessage(`Placed ${this.currentBuildItem.id}!`);
-        console.log(`Placed ${this.currentBuildItem.id} at`, placedObject.position);
-
-        // Continue building the same item? Or exit?
-        // For now, let's stay in build mode for the same item.
-        // this.exitBuildMode(); // Uncomment to exit after each placement
     },
 
-     // Called from HTML button click
-     placeItem: function(itemId) {
-         this.enterBuildMode(itemId);
-         // Optional: Hide the build menu UI after selection
-         // document.getElementById('build-menu').style.display = 'none';
+    // --- Called by UI buttons via UIManager.setupBuildMenuButtons ---
+    craftBuildable: function(itemId) {
+         const recipe = Crafting.recipes[itemId];
+         const buildableData = CONSTANTS.BUILDABLES[itemId];
+         const itemName = buildableData?.name || itemId;
+
+         if (!recipe) {
+             console.warn(`No recipe found to craft buildable: ${itemId}`);
+             Game.UIManager.logMessage(`Cannot craft ${itemName}: No recipe.`);
+             return;
+         }
+         if (!buildableData) {
+             console.warn(`No buildable data found for item: ${itemId}`);
+             // Still allow crafting if recipe exists, could be a component?
+         }
+
+         // Attempt to craft the item into inventory
+         if (Crafting.attemptCraft(itemId)) {
+             // attemptCraft already logs success/failure and updates inventory UI
+         }
+         // Optional: Close build menu after crafting attempt?
+         // Game.UIManager.toggleBuildMenu();
      }
-
-
 };
 
 window.Building = Building;

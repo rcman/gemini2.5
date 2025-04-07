@@ -1,0 +1,63 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open World Survival</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <!-- UI Elements (Basic HUD) -->
+    <div id="hud">
+        <div>Health: <span id="health-value">100</span></div>
+        <div>Hunger: <span id="hunger-value">100</span></div>
+        <div>Stamina: <span id="stamina-value">100</span></div>
+        <div id="interaction-prompt" style="display: none;">Press [E] to interact</div>
+        <div id="message-log">Welcome!</div>
+    </div>
+
+    <!-- Build Menu Placeholder -->
+    <div id="build-menu" style="display: none; position: absolute; top: 50px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px;">
+        <h2>Build Menu (Press B to close)</h2>
+        <button onclick="Game.Building.placeItem('foundation')">Foundation</button>
+        <button onclick="Game.Building.placeItem('wall')">Wall</button>
+        <button onclick="Game.Building.placeItem('campfire')">Campfire</button>
+        <!-- Add more build items -->
+    </div>
+
+     <!-- Inventory Menu Placeholder -->
+    <div id="inventory-menu" style="display: none; position: absolute; top: 50px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; width: 200px;">
+        <h2>Inventory (Press I to close)</h2>
+        <ul id="inventory-list">
+            <!-- Items will be listed here by JS -->
+        </ul>
+         <h3>Crafting</h3>
+         <button onclick="Game.Crafting.attemptCraft('axe')">Craft Axe (Wood: 3, Stone: 2)</button>
+         <button onclick="Game.Crafting.attemptCraft('campfire')">Craft Campfire (Wood: 5, Fiber: 2)</button>
+         <!-- Add more basic crafts -->
+    </div>
+
+
+    <!-- Library -->
+    <script src="js/lib/three.min.js"></script>
+
+    <!-- Game Modules (Order Matters!) -->
+    <script src="js/constants.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/resources.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/interaction.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/ai.js"></script> <!-- AI before World if world spawns AI -->
+    <script src="js/world.js"></script>
+    <script src="js/building.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script> <!-- Main should be last -->
+
+</body>
+</html>

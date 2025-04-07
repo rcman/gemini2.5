@@ -99,24 +99,41 @@ const UIManager = {
         } else {
             if (this.inventoryMenuElement && this.inventoryMenuElement.style.display !== 'none') this.inventoryMenuElement.style.display = 'none';
             this.buildMenuElement.style.display = 'block';
+            // When opening build menu, cancel placement mode
+             if (Building.isPlacing) Building.cancelPlacement();
+             this.clearSelectionHighlights();
         }
     },
 
-     toggleInventoryMenu: function() {
+    toggleInventoryMenu: function() {
          if (!this.inventoryMenuElement) return;
         const isOpen = this.inventoryMenuElement.style.display !== 'none';
+
         if (isOpen) {
+            // --- Closing Inventory Panel ---
             this.inventoryMenuElement.style.display = 'none';
-            // If closing inventory while an inventory item was selected for placement, cancel placement
-            if (Building.isPlacing && Building.currentItemInfo?.source === 'inventory') {
-                 Building.cancelPlacement();
-            }
+
+            // REMOVED THE CHECK THAT CAUSED IMMEDIATE CANCELLATION
+            // Cancellation is handled by player input or selection changes elsewhere.
+
         } else {
-             if (this.buildMenuElement && this.buildMenuElement.style.display !== 'none') this.buildMenuElement.style.display = 'none';
+            // --- Opening Inventory Panel ---
+             // Close build menu if open
+             if (this.buildMenuElement && this.buildMenuElement.style.display !== 'none') {
+                 this.buildMenuElement.style.display = 'none';
+                  // Also cancel placement if build menu was active and we are opening inventory
+                 if (Building.isPlacing) Building.cancelPlacement();
+             }
             Inventory.updateUI(); // Refresh inventory list when opening
             this.inventoryMenuElement.style.display = 'block';
+            // When opening inventory, ensure we are not in placement mode from quickbar
+            if (Building.isPlacing && Building.currentItemInfo?.source === 'quickbar') {
+                 Building.cancelPlacement();
+            }
+            this.clearSelectionHighlights(); // Clear quickbar selection when opening inventory
         }
     },
+
 
     isMenuOpen: function() {
          return (this.buildMenuElement && this.buildMenuElement.style.display !== 'none') ||
@@ -132,16 +149,15 @@ const UIManager = {
         if (Object.keys(items).length === 0) { this.inventoryListElement.innerHTML = '<li>Empty</li>'; }
         else {
             for (const itemId in items) {
-                 // Use combined data source lookup
                  const itemData = CONSTANTS.BUILDABLES[itemId] || Resources.getResourceData(itemId) || Crafting.getRecipe(itemId);
-                 const name = itemData?.name || itemId; // Fallback to itemId if no name found
+                 const name = itemData?.name || itemId;
                  const quantity = items[itemId];
-                 const isPlaceable = !!CONSTANTS.BUILDABLES[itemId]; // Check if it's in the buildables list
+                 const isPlaceable = !!CONSTANTS.BUILDABLES[itemId];
 
                  const listItem = document.createElement('li');
                  listItem.textContent = `${name}: ${quantity}`;
                  listItem.dataset.itemId = itemId;
-                 listItem.classList.remove('selected'); // Ensure not selected by default
+                 listItem.classList.remove('selected');
 
                  if (isPlaceable) {
                       listItem.style.cursor = 'pointer';
@@ -150,25 +166,31 @@ const UIManager = {
                      // Re-apply highlight if this item is the selected one
                      if (this.selectedInventoryItemElement && this.selectedInventoryItemElement.dataset.itemId === itemId) {
                           listItem.classList.add('selected');
-                          // Update reference in case list order changed (safer)
                           this.selectedInventoryItemElement = listItem;
                      }
 
                      // Click listener to SELECT item for placement FROM inventory
                      listItem.addEventListener('click', (event) => {
-                         // Only allow selection when inventory menu is visible
+                         // Check if the menu is actually open before proceeding
                          if (this.inventoryMenuElement && this.inventoryMenuElement.style.display !== 'none') {
                              const clickedItemId = event.target.dataset.itemId;
                              if (clickedItemId) {
                                  const isCurrentlySelected = this.selectedInventoryItemElement === listItem && Building.isPlacing;
+
                                  if (isCurrentlySelected) {
-                                     Building.cancelPlacement(); // Toggle off placement
+                                     // Clicking the already selected item cancels placement BUT keeps menu open
+                                     Building.cancelPlacement();
+                                     // Don't toggle menu here
                                  } else {
-                                      if (Building.isPlacing) Building.cancelPlacement(); // Cancel previous placement
+                                      // If placing something else, cancel that first
+                                      if (Building.isPlacing) Building.cancelPlacement();
+
+                                     // Start placement
                                      Building.startPlacement({ itemId: clickedItemId, source: 'inventory' });
                                      this.highlightInventoryItem(listItem); // Highlight visually
-                                     // Optional: Close inventory after selection?
-                                     // this.toggleInventoryMenu();
+
+                                     // *** Close inventory AFTER selection ***
+                                     this.toggleInventoryMenu(); // This will hide the panel
                                  }
                              }
                          }
@@ -176,8 +198,7 @@ const UIManager = {
                  } else {
                       // Non-placeable item styling
                       listItem.style.cursor = 'default';
-                      // Optional: Add specific class for non-placeables
-                      // listItem.classList.add('non-placeable');
+                      listItem.title = 'Cannot be placed directly';
                  }
 
                  this.inventoryListElement.appendChild(listItem);
@@ -231,7 +252,9 @@ const UIManager = {
     highlightQuickSlot: function(index) {
         this.clearSelectionHighlights(); // Clear previous highlights
         if (index >= 0 && index < this.quickSlotElements.length) {
-            this.quickSlotElements[index].classList.add('selected');
+             if (this.quickSlotElements[index]) { // Check element exists
+                 this.quickSlotElements[index].classList.add('selected');
+             }
             this.selectedQuickSlotIndex = index;
         }
     },
@@ -246,7 +269,9 @@ const UIManager = {
 
     clearSelectionHighlights: function() {
         if (this.selectedQuickSlotIndex !== -1 && this.selectedQuickSlotIndex < this.quickSlotElements.length) {
-            this.quickSlotElements[this.selectedQuickSlotIndex].classList.remove('selected');
+            if (this.quickSlotElements[this.selectedQuickSlotIndex]) { // Check element exists
+                 this.quickSlotElements[this.selectedQuickSlotIndex].classList.remove('selected');
+            }
         }
         if (this.selectedInventoryItemElement) {
             // Check if element still exists before removing class (safer if list refreshed)
@@ -259,19 +284,16 @@ const UIManager = {
     },
 
     // --- Setup Build Menu Buttons ---
-    // Called from Game.init after Building is initialized.
     setupBuildMenuButtons: function() {
         const buildMenu = document.getElementById('build-menu');
         if (!buildMenu) {
              console.error("Build menu element not found!");
              return;
         }
-        // Use data-build-id attribute on buttons
         const buttons = buildMenu.querySelectorAll('button[data-build-id]');
         buttons.forEach(button => {
             const itemId = button.dataset.buildId;
             if (itemId) {
-                // Ensure onclick is properly assigned
                 button.onclick = () => {
                      console.log(`Crafting attempt button clicked for: ${itemId}`);
                      Building.craftBuildable(itemId);

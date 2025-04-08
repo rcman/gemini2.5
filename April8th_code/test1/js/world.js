@@ -3,12 +3,13 @@ class World {
     constructor(game) {
         this.game = game;
         this.scene = game.scene;
-        this.objects = []; // Trees, rocks, plants, etc.
-        this.collidableObjects = []; // Objects for physics/raycast collision
-         this.interactableObjects = []; // Objects the player can interact with
-         this.aiEntities = []; // List of active AI controllers
+        this.objects = []; // All managed objects (resources, loot, etc.)
+        this.collidableObjects = []; // Objects for physics/raycast collision (terrain, static meshes)
+        this.interactableObjects = []; // Objects the player can interact with (harvest nodes, loot, AI?)
+        this.aiEntities = []; // List of active AI controllers
 
         this.worldSize = 200; // Width/Depth of the world area
+        this.groundMesh = null; // Keep a reference to the ground
     }
 
     generate() {
@@ -17,142 +18,121 @@ class World {
         this.spawnResources();
         this.spawnInitialAI();
 
-        // Add placed build objects to collidable/interactable lists if needed
-         this.game.buildingSystem.placedObjects.forEach(obj => {
-             this.collidableObjects.push(obj.mesh);
-             if (ITEMS[obj.itemId]?.interactable) {
-                 this.interactableObjects.push(obj.mesh);
-             }
-         });
+        // Note: Placed build objects are added dynamically via getCollidableObjects/getInteractableObjects
+        // using game.buildingSystem.placedObjects, no need to add them here explicitly.
     }
 
     createGround() {
-        const groundGeometry = new THREE.PlaneGeometry(this.worldSize, this.worldSize, 50, 50); // W, H, Segments
+        const groundGeometry = new THREE.PlaneGeometry(this.worldSize, this.worldSize, 50, 50);
         const groundMaterial = new THREE.MeshStandardMaterial({
              color: 0x556B2F, // Dark Olive Green
-             wireframe: false, // Set true for debugging terrain shape
+             // roughness: 0.9, metalness: 0.1, // Less shiny ground
              // TODO: Add terrain texture, normal map, etc.
              });
-        const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
-        groundMesh.rotation.x = -Math.PI / 2; // Rotate plane to be horizontal
-        groundMesh.receiveShadow = true;
-        groundMesh.userData.type = 'ground';
-        this.scene.add(groundMesh);
-        this.collidableObjects.push(groundMesh); // Ground is collidable
+        this.groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+        this.groundMesh.rotation.x = -Math.PI / 2;
+        this.groundMesh.receiveShadow = true;
+        this.groundMesh.userData = { type: 'ground', isCollidable: true }; // Mark as ground and collidable
+        this.scene.add(this.groundMesh);
+        this.collidableObjects.push(this.groundMesh); // Ground is collidable
     }
 
     addFog() {
         const fogColor = 0xcccccc; // Light grey fog
-        const near = 10; // Start distance
-        const far = this.worldSize * 0.6; // End distance - adjust for desired view distance
+        const near = 15; // Start distance
+        const far = this.worldSize * 0.7; // End distance
         this.scene.fog = new THREE.Fog(fogColor, near, far);
-        this.scene.background = new THREE.Color(fogColor); // Match background to fog
+        this.scene.background = new THREE.Color(fogColor);
     }
 
     spawnResources() {
-        const halfSize = this.worldSize / 2;
-        const nodeDensity = 0.5; // Lower number = more space between nodes
-
-        // Calculate number based on percentage coverage (approximate)
+        const halfSize = this.worldSize / 2 * 0.95; // Spawn slightly away from edges
+        const density = 0.015; // Resources per sq meter (adjust)
         const area = this.worldSize * this.worldSize;
-        const treeCount = Math.floor(area * 0.75 / (5*5)); // Approx area per tree
-        const stoneCount = Math.floor(area * 0.70 / (3*3));
-        const fiberCount = Math.floor(area * 0.80 / (1*1));
+        const totalNodes = Math.floor(area * density);
 
-        console.log(`Spawning ~${treeCount} trees, ${stoneCount} stones, ${fiberCount} fiber`);
+        const resourceTypes = [
+            { type: 'Tree', chance: 0.30, func: this.spawnTree.bind(this) },
+            { type: 'StoneNode', chance: 0.35, func: this.spawnStone.bind(this) }, // Includes ores
+            { type: 'Fiber', chance: 0.30, func: this.spawnFiber.bind(this) },
+            // Add blueberry bush etc.
+             { type: 'BlueberryBush', chance: 0.05, func: this.spawnBlueberry.bind(this) },
+        ];
 
+        console.log(`Attempting to spawn ~${totalNodes} resource nodes...`);
+        let spawnedCount = 0;
 
-        // Trees (75%)
-        for (let i = 0; i < treeCount; i++) {
+        for (let i = 0; i < totalNodes; i++) {
             const x = Utils.getRandomInt(-halfSize, halfSize);
             const z = Utils.getRandomInt(-halfSize, halfSize);
-            this.spawnTree(new THREE.Vector3(x, 0, z));
-        }
+            const y = 0; // Base height, adjust with raycast down if terrain is uneven
 
-        // Stones (70% - Various types)
-        for (let i = 0; i < stoneCount; i++) {
-             const x = Utils.getRandomInt(-halfSize, halfSize);
-             const z = Utils.getRandomInt(-halfSize, halfSize);
-             this.spawnStone(new THREE.Vector3(x, 0, z));
-        }
+            // TODO: Raycast down from (x, 50, z) to find actual ground height 'y' for uneven terrain
 
-        // Fiber (80%)
-        for (let i = 0; i < fiberCount; i++) {
-             const x = Utils.getRandomInt(-halfSize, halfSize);
-             const z = Utils.getRandomInt(-halfSize, halfSize);
-             this.spawnFiber(new THREE.Vector3(x, 0, z));
+            const rand = Math.random();
+            let cumulativeChance = 0;
+            for (const res of resourceTypes) {
+                cumulativeChance += res.chance;
+                if (rand < cumulativeChance) {
+                    res.func(new THREE.Vector3(x, y, z));
+                    spawnedCount++;
+                    break; // Spawn one type per location
+                }
+            }
         }
-
-         // TODO: Spawn vegetables, medical plants, loot crates etc.
+         console.log(`Successfully spawned ${spawnedCount} resource nodes.`);
     }
 
      spawnTree(position) {
-         // Placeholder Tree (Cylinder trunk, Sphere leaves)
          const trunkHeight = Utils.getRandomInt(4, 8);
          const trunkRadius = trunkHeight * 0.1;
-         const trunkGeo = new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.2, trunkHeight, 8);
-         const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
+         const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight, 8); // Tapered trunk
+         const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
          const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-         trunk.position.set(position.x, trunkHeight / 2, position.z); // Position base at y=0
+         // Position base at calculated Y (position.y)
+         trunk.position.set(position.x, position.y + trunkHeight / 2, position.z);
          trunk.castShadow = true;
-         trunk.userData = { resourceType: 'Wood', health: 10, type: 'resource_node' };
+         trunk.userData = { resourceType: 'Wood', health: 50, type: 'resource_node', isCollidable: true, isInteractable: true };
 
-         const leavesRadius = trunkHeight * 0.4;
-         const leavesGeo = new THREE.SphereGeometry(leavesRadius, 8, 6);
-         const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22 }); // Forest Green
+         const leavesRadius = trunkHeight * Utils.getRandomInt(3, 5) * 0.1;
+         // Use Icosahedron for slightly more varied leaf shape
+         const leavesGeo = new THREE.IcosahedronGeometry(leavesRadius, 0);
+         const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22, flatShading: true }); // Flat shading for low poly look
          const leaves = new THREE.Mesh(leavesGeo, leavesMat);
-         leaves.position.y = trunkHeight; // Position leaves on top of trunk
+         // Position leaves relative to trunk top
+         leaves.position.set(position.x, position.y + trunkHeight + leavesRadius * 0.5, position.z);
          leaves.castShadow = true;
-         leaves.userData = { isDecoration: true }; // Mark leaves as non-interactable part
+         leaves.userData = { type: 'decoration', isCollidable: false }; // Leaves usually not collidable/interactable
 
-         // Group trunk and leaves (optional but good for organization)
-         const treeGroup = new THREE.Group();
-         treeGroup.add(trunk);
-         treeGroup.add(leaves);
-         treeGroup.position.copy(position); // Set group's base position
-         treeGroup.userData.isTreeGroup = true; // Identify group if needed
-
-         // Make the *trunk* the interactable part
-         this.scene.add(trunk); // Add trunk directly to scene for interaction raycasting
-         this.scene.add(leaves); // Add leaves separately
-        // this.scene.add(treeGroup); // Or add the group
-         this.objects.push(trunk); // Track the trunk
-         this.objects.push(leaves); // Track the leaves
-         this.collidableObjects.push(trunk); // Trees are collidable
-         this.interactableObjects.push(trunk); // Trunks are interactable
+         this.scene.add(trunk);
+         this.scene.add(leaves); // Add leaves separately for visuals
+         this.objects.push(trunk); // Track the interactable part
+         this.objects.push(leaves); // Track visuals too if needed for removal later
+         this.collidableObjects.push(trunk); // Trunk is collidable
+         this.interactableObjects.push(trunk); // Trunk is interactable
      }
 
       spawnStone(position) {
-          // Placeholder Stone (Irregular Sphere/Box)
           const size = Utils.getRandomInt(1, 3) * 0.5;
-          // Use Box with slight random dimensions for variety? Or Icosahedron?
-           const stoneGeo = new THREE.IcosahedronGeometry(size, 0); // Radius, detail level (0 = blocky)
-          const stoneMat = new THREE.MeshStandardMaterial({ color: 0x808080 }); // Grey
+          const stoneGeo = new THREE.IcosahedronGeometry(size, Utils.getRandomInt(0, 1)); // Random detail level
+          const stoneMat = new THREE.MeshStandardMaterial({ color: 0x808080, flatShading: true });
 
-           // Determine ore type randomly
-           let oreType = 'Stone';
-           let health = 5;
-           const rand = Math.random();
-           if (rand < 0.15) { // 15% chance Iron
-               oreType = 'Iron Ore';
-               stoneMat.color.set(0xB87333); // Rusty color
-               health = 8;
-           } else if (rand < 0.25) { // 10% chance Copper
-               oreType = 'Copper Ore';
-               stoneMat.color.set(0xb87333); // Copper color
-                health = 7;
-           } else if (rand < 0.30) { // 5% chance Zinc
-                oreType = 'Zinc Ore';
-                stoneMat.color.set(0xc0c0c0); // Silvery color
-                 health = 6;
-           }
-
+          let oreType = 'Stone';
+          let health = 25;
+          const rand = Math.random();
+          if (rand < 0.20) { // 20% chance Iron
+               oreType = 'Iron Ore'; stoneMat.color.set(0xF0A060); health = 35;
+           } else if (rand < 0.35) { // 15% chance Copper
+               oreType = 'Copper Ore'; stoneMat.color.set(0xb87333); health = 30;
+           } else if (rand < 0.45) { // 10% chance Zinc
+                oreType = 'Zinc Ore'; stoneMat.color.set(0xc0c0c0); health = 30;
+           } // Else: 55% chance Stone
 
           const stone = new THREE.Mesh(stoneGeo, stoneMat);
-           stone.position.set(position.x, size * 0.8, position.z); // Position slightly embedded in ground
-          stone.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI); // Random rotation
+          stone.position.set(position.x, position.y + size * 0.6, position.z); // Embed slightly
+          stone.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
           stone.castShadow = true;
-           stone.userData = { resourceType: oreType, health: health, type: 'resource_node' };
+          stone.userData = { resourceType: oreType, health: health, type: 'resource_node', isCollidable: true, isInteractable: true };
 
           this.scene.add(stone);
           this.objects.push(stone);
@@ -161,40 +141,58 @@ class World {
       }
 
       spawnFiber(position) {
-          // Placeholder Fiber (Small green sphere/sprite)
+           // Maybe use a small plane with texture later? For now, sphere.
            const fiberGeo = new THREE.SphereGeometry(0.2, 5, 4);
-           const fiberMat = new THREE.MeshBasicMaterial({ color: 0x90EE90 }); // Light Green (Basic material, no lighting needed?)
+           const fiberMat = new THREE.MeshStandardMaterial({ color: 0x90EE90, roughness: 0.8 });
            const fiber = new THREE.Mesh(fiberGeo, fiberMat);
-           fiber.position.set(position.x, 0.2, position.z);
-           // No shadow casting for small objects usually
-           fiber.userData = { resourceType: 'Fiber', health: 1, type: 'resource_node' }; // Only 1 hit to gather
+           fiber.position.set(position.x, position.y + 0.2, position.z);
+           fiber.userData = { resourceType: 'Fiber', health: 1, type: 'resource_node', isCollidable: false, isInteractable: true };
 
            this.scene.add(fiber);
            this.objects.push(fiber);
-           // Fiber usually isn't collidable
+           // Fiber not collidable
            this.interactableObjects.push(fiber);
       }
 
+       spawnBlueberry(position) {
+           // Placeholder: Small green sphere bush
+           const bushGeo = new THREE.SphereGeometry(0.4, 6, 5);
+           const bushMat = new THREE.MeshStandardMaterial({ color: 0x2E8B57 }); // SeaGreen
+           const bush = new THREE.Mesh(bushGeo, bushMat);
+           bush.position.set(position.x, position.y + 0.4, position.z);
+           bush.castShadow = true;
+           // Single hit deplete for now
+           bush.userData = { resourceType: 'Blueberry', health: 1, type: 'resource_node', isCollidable: false, isInteractable: true };
+
+           this.scene.add(bush);
+           this.objects.push(bush);
+           this.interactableObjects.push(bush);
+      }
+
+
      spawnInitialAI() {
-         const halfSize = this.worldSize / 2;
-         const numPassive = 15; // Chickens, rabbits, deer
-         const numHostile = 5; // Wolves, bears, hunters
+         const halfSize = this.worldSize / 2 * 0.9; // Spawn slightly away from edge
+         const numPassive = 15;
+         const numHostile = 8; // Increased hostile count
+
+         const passiveTypes = ['chicken']; // Add 'rabbit', 'deer' later
+         const hostileTypes = ['wolf', 'hunter']; // Add 'bear' later
 
          for (let i = 0; i < numPassive; i++) {
              const x = Utils.getRandomInt(-halfSize, halfSize);
              const z = Utils.getRandomInt(-halfSize, halfSize);
-             // Choose type randomly
-             const type = ['chicken', 'rabbit', 'deer'][Utils.getRandomInt(0, 1)]; // Add deer later
-              const ai = createAI(this.game, type, new THREE.Vector3(x, 0, z));
-              if(ai) this.aiEntities.push(ai);
+             // TODO: Raycast down to find ground Y
+             const type = passiveTypes[Utils.getRandomInt(0, passiveTypes.length - 1)];
+             const ai = createAI(this.game, type, new THREE.Vector3(x, 0, z)); // Pass 0 Y for now
+             if(ai) this.aiEntities.push(ai);
          }
 
          for (let i = 0; i < numHostile; i++) {
              const x = Utils.getRandomInt(-halfSize, halfSize);
              const z = Utils.getRandomInt(-halfSize, halfSize);
-             // Choose type randomly
-             const type = ['wolf', 'hunter'][Utils.getRandomInt(0, 1)]; // Add bear/cougar later
-             const ai = createAI(this.game, type, new THREE.Vector3(x, 0, z));
+             // TODO: Raycast down to find ground Y
+             const type = hostileTypes[Utils.getRandomInt(0, hostileTypes.length - 1)];
+             const ai = createAI(this.game, type, new THREE.Vector3(x, 0, z)); // Pass 0 Y for now
              if(ai) this.aiEntities.push(ai);
          }
           console.log(`Spawned ${this.aiEntities.length} AI entities.`);
@@ -202,102 +200,137 @@ class World {
 
      // --- Object Management ---
 
-     add(object) {
-         // Add object to scene and appropriate lists
-         this.scene.add(object);
-         this.objects.push(object);
-         if (object.userData.isCollidable) this.collidableObjects.push(object);
-         if (object.userData.isInteractable) this.interactableObjects.push(object);
-          if (object.userData.aiController) this.aiEntities.push(object.userData.aiController);
-     }
-
      removeObject(objectToRemove) {
+          if (!objectToRemove) return;
+
+          // Remove associated objects (like tree leaves if removing trunk)
+          if (objectToRemove.userData?.type === 'resource_node' && objectToRemove.userData?.resourceType === 'Wood') {
+             // Find and remove corresponding leaves (this is inefficient, better to group them)
+             const leavesToRemove = this.objects.find(obj =>
+                 obj.userData?.type === 'decoration' &&
+                 Math.abs(obj.position.x - objectToRemove.position.x) < 0.1 &&
+                 Math.abs(obj.position.z - objectToRemove.position.z) < 0.1
+             );
+             if (leavesToRemove) {
+                 this.removeObject(leavesToRemove); // Recursive call (careful!) or direct removal
+             }
+          }
+
+
           // Remove from scene
           if (objectToRemove.parent) {
             objectToRemove.parent.remove(objectToRemove);
           }
 
           // Dispose geometry and material to free GPU memory
-          if (objectToRemove.geometry) objectToRemove.geometry.dispose();
-          if (objectToRemove.material) {
-               if (Array.isArray(objectToRemove.material)) {
-                   objectToRemove.material.forEach(m => m.dispose());
-               } else {
-                   objectToRemove.material.dispose();
-               }
+          try {
+              if (objectToRemove.geometry) {
+                  objectToRemove.geometry.dispose();
+              }
+              if (objectToRemove.material) {
+                  if (Array.isArray(objectToRemove.material)) {
+                      objectToRemove.material.forEach(m => {
+                          if (m.map) m.map.dispose();
+                          // Dispose other textures...
+                          m.dispose();
+                      });
+                  } else {
+                      if (objectToRemove.material.map) objectToRemove.material.map.dispose();
+                      // Dispose other textures...
+                      objectToRemove.material.dispose();
+                  }
+              }
+          } catch (error) {
+              console.error("Error during resource disposal:", error, objectToRemove);
           }
 
 
-          // Remove from internal lists
+          // Remove from internal lists using filter (creates new arrays)
           this.objects = this.objects.filter(obj => obj !== objectToRemove);
           this.collidableObjects = this.collidableObjects.filter(obj => obj !== objectToRemove);
           this.interactableObjects = this.interactableObjects.filter(obj => obj !== objectToRemove);
-
-         // If it's part of a group (like a tree), remove the whole group? Or just the part?
-         // Need careful handling here. For now, assumes direct removal.
      }
 
       removeAI(aiController) {
+         // Mesh removal and disposal should happen in aiController.die() or here
+         // Let's assume die handles mesh removal after animation timer
          this.aiEntities = this.aiEntities.filter(ai => ai !== aiController);
          console.log(`Removed AI controller. Remaining AI: ${this.aiEntities.length}`);
-         // Mesh removal is handled in aiController.die() or here if needed
-          // this.removeObject(aiController.mesh);
      }
 
 
      // --- Getters for other systems ---
      getCollidableObjects() {
-         // Return objects relevant for physics/movement collision
-         // Might include placed build items as well
+         // Combine static world colliders with dynamic ones (buildings, potentially large AI?)
           return [
-            ...this.collidableObjects,
-             ...this.game.buildingSystem.placedObjects.map(p => p.mesh) // Add buildings dynamically
+            ...this.collidableObjects, // Ground, rocks, tree trunks
+             ...this.game.buildingSystem.placedObjects.map(p => p.mesh).filter(mesh => !!mesh), // Add building meshes
+             // Optionally add AI meshes if they should block other AI/player significantly
+             // ...this.aiEntities.map(ai => ai.mesh).filter(mesh => !!mesh && mesh.userData?.isCollidable)
             ];
      }
 
      getInteractableObjects() {
-         // Return objects player can interact with (harvest, open, use)
+         // Combine static interactables with dynamic ones (AI, buildings, loot)
           return [
-            ...this.interactableObjects,
-             ...this.aiEntities.map(ai => ai.mesh), // AI are interactable (attack/loot)
+            ...this.interactableObjects, // Harvest nodes
+             ...this.aiEntities.map(ai => ai.mesh).filter(mesh => !!mesh && ai.health > 0), // Active AI are interactable (attack)
              ...this.game.buildingSystem.placedObjects
-                 .filter(p => ITEMS[p.itemId]?.interactable) // Only interactable buildings
-                 .map(p => p.mesh)
+                 .filter(p => p.mesh && ITEMS[p.itemId]?.interactable) // Only interactable buildings (workbench, forge)
+                 .map(p => p.mesh),
+             ...this.objects.filter(o => o.userData?.type === 'loot_container') // Loot bags
              ];
      }
 
-     // Optional: Update world elements (animations, weather, etc.)
      update(deltaTime) {
-          // Update all active AI
-          this.aiEntities.forEach(ai => ai.update(deltaTime));
+         if (deltaTime > 0.1) deltaTime = 0.1; // Clamp delta time
 
-         // Update other world systems (weather, day/night cycle, resource respawning?)
+          // Update all active AI - use a copy of the array in case AI dies and removes itself during iteration
+         [...this.aiEntities].forEach(ai => {
+             if (ai && ai.update) { // Check if ai and update method exist
+                 try {
+                    ai.update(deltaTime);
+                 } catch (error) {
+                     console.error("Error updating AI:", ai.mesh?.uuid, error);
+                      // Optionally remove the broken AI?
+                      // if (ai.mesh) this.removeObject(ai.mesh);
+                      // this.removeAI(ai);
+                 }
+             }
+         });
+
+         // TODO: Update other world systems (weather, day/night cycle, resource respawning?)
      }
 
       createLootDrop(position, items) {
-         // Simple placeholder: a small bag mesh
-         // TODO: Make this interactable to pick up items
-          const lootBagGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-          const lootBagMat = new THREE.MeshStandardMaterial({ color: 0x SaddleBrown });
+         // Simple placeholder: a small brown box 'bag'
+          const lootBagGeo = new THREE.BoxGeometry(0.35, 0.25, 0.35);
+          const lootBagMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // SaddleBrown hex
           const lootBagMesh = new THREE.Mesh(lootBagGeo, lootBagMat);
+          // Place slightly above the source position's Y
           lootBagMesh.position.copy(position);
-          lootBagMesh.position.y = Math.max(0.15, position.y); // Ensure slightly above ground
-          lootBagMesh.userData = { type: 'loot_container', items: items, isInteractable: true };
+          lootBagMesh.position.y = Math.max(position.y + 0.15, 0.15); // Ensure slightly above ground 0
+          lootBagMesh.userData = {
+              type: 'loot_container',
+              items: items,
+              isInteractable: true,
+              isCollidable: false // Loot bags usually not collidable
+          };
 
           this.scene.add(lootBagMesh);
-          this.objects.push(lootBagMesh);
+          this.objects.push(lootBagMesh); // Track loot bag
           this.interactableObjects.push(lootBagMesh); // Make it interactable
 
-          console.log("Created loot drop at", position, "with", items);
+          console.log("Created loot drop at", position.toArray().map(n=>n.toFixed(1)), "with", items.length, "item stacks");
 
-           // Add interaction logic in player.js to pick up items from 'loot_container'
-           // Add despawn timer?
+           // Add despawn timer
+           const despawnTime = 120000; // 2 minutes
            setTimeout(() => {
-               if (lootBagMesh.parent) {
-                    console.log("Despawning loot bag");
+               if (lootBagMesh.parent) { // Check if still exists
+                    console.log("Despawning loot bag:", lootBagMesh.uuid);
                     this.removeObject(lootBagMesh);
                }
-           }, 60000); // Despawn after 1 minute
+           }, despawnTime);
       }
 
 }

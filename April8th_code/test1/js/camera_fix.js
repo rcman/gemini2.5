@@ -1,4 +1,4 @@
-// js/camera.js
+// js/camera.js - Fixed rotation sensitivity
 class ThirdPersonCamera {
     constructor(camera, target) {
         this.camera = camera;

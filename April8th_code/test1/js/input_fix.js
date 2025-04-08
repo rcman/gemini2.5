@@ -1,4 +1,4 @@
-// js/input.js
+// js/input.js - Fixed input handling
 class InputHandler {
     constructor(game) {
         this.game = game;

@@ -1,0 +1,129 @@
+body {
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    background-color: #000;
+    color: white;
+    font-family: sans-serif;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
+
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicking through UI overlays unless needed */
+}
+
+#hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    border-radius: 5px;
+}
+
+#inventory-panel, #build-menu, #workbench-menu, #forge-menu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(50, 50, 50, 0.9);
+    border: 2px solid #888;
+    padding: 20px;
+    border-radius: 10px;
+    width: 400px; /* Adjust as needed */
+    pointer-events: auto; /* Enable interaction */
+    z-index: 10;
+}
+
+#inventory-panel.hidden, #build-menu.hidden,
+#workbench-menu.hidden, #forge-menu.hidden,
+#interaction-prompt.hidden {
+    display: none;
+}
+
+#inventory-grid, #quick-bar, #build-options {
+    display: grid;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+#inventory-grid {
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); /* Adjust columns */
+}
+
+#quick-bar {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(8, 60px); /* 8 slots */
+    gap: 5px;
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 8px;
+    border-radius: 5px;
+    pointer-events: auto;
+}
+
+.inventory-slot, .quick-bar-slot {
+    width: 50px;
+    height: 50px;
+    border: 1px solid #aaa;
+    background-color: rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
+    user-select: none; /* Prevent text selection */
+}
+
+.inventory-slot img, .quick-bar-slot img {
+    max-width: 80%;
+    max-height: 80%;
+    pointer-events: none; /* Don't block clicks on slot */
+}
+
+.item-count {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 0.8em;
+    background-color: rgba(0,0,0,0.7);
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+
+#interaction-prompt {
+    position: absolute;
+    bottom: 25%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px 15px;
+    border-radius: 5px;
+    font-size: 1.1em;
+}
+
+/* Add styles for buttons, build options etc. */
+#inventory-panel button, #build-menu button {
+     pointer-events: auto;
+     cursor: pointer;
+     margin-top: 15px;
+     padding: 8px 15px;
+}
+#build-options button {
+    display: block;
+    width: 100%;
+    margin-bottom: 5px;
+    text-align: left;
+}

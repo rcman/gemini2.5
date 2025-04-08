@@ -1,0 +1,69 @@
+write a 3d Open-world in a third-person using html5 and three.min.js, all js files are local on the web server.  Players must manage hunger, health, and stamina while crafting, building their base from wildlife and hostile AI hunters. The game blends survival with base-building and resource management, providing a tense, immersive solo or co-op experience. The js files need to be split up for easy management. When pressing the key I to open and close the inventory which displays on the screen. There is also a lower quick-bar at the bottom on the screen with 8 slots. Right clicking on an item in the quick-slot moves it to inventory. Player spawns with an axe, pick-axe, knife and a canteen. The World should have Fog, thress should cover 75% of the map, varied stones should cover 70% of the map, Fiber should cover 80% of the map.
+
+Resources Found on the Map
+
+- Wood – Harvested from trees using an axe. Essential for fuel, crafting, and building.
+- Fiber – Found on all plant nodes; used in cordage and clothing.
+- Vegetables – Wild plants like blueberries, carrots, onions.
+- Animals – Chickens, rabbits, deer, wolves, bears, cougars.
+- Water – Gathered from lakes, boiled to purify.
+- Medical Plants – Used for biofuel and first aid.
+- Different stones: some that have iron-ore, some that have copper-ore and some that have zinc-ore.
+
+Different Ore & Mining Resources can be found on different rocks.
+
+- Iron Ore – Most common; found on rocks.
+- Copper Ore
+
+Animal Products
+
+- Fat – Rendered into bio fuel.
+- Leather – From animals, used in crafting clothes.
+- Meat – Cooked for food, spoils if left too long.
+- Feathers – For arrows and gear.
+
+Tools & Survival Gear
+
+- Axe – Wood and metal scrap.
+- Pick-axe – Used to mine ores.
+- Fishing Rod – Cordage, sticks, scrap.
+- Bows & Arrows – Wood, fibre, nails, feathers.
+- Campfire – For warmth and cooking.
+- Bandages & First Aid Kits – Cloth, medicinal herbs.
+
+A Workbench is a craft-able by the player. When crafted, it can be placed in the world. This workbench has its own build menu when accessing it with the letter E.
+
+Items that can be make at a Crafting Table.
+
+- Lock picks – For locked crates; require iron fragments
+- Rifle Rounds, 9mm, Shotgun Shells – Requires casings (from copper/zinc), gunpowder
+- Rope – Sinew and cordage.
+- nails
+- rope
+
+The Forge is craftable by the player and can be placed in the world. It can be accessed with the letter E and has ot's own build menu items
+
+Place raw ore (Iron, Copper, zinc)
+
+- Produces Iron, copper and zinc ingots
+
+Player Base Building System. 
+
+Items can be built and placed in the world by the player. All items listed below snap to each other. The mouse wheel to rotates each building component. 
+
+A foundation must be placed down first for walls to connect to the foundation. You can remove an item by right clicking on it with your mouse.
+
+Base craft-able items:
+
+- Foundation: Equal in width and length
+- Walls should be the width of one foundation
+- Walls with Windows should be the width of one foundation
+- Ceilings should be the width of one foundation
+- use B to open and close the build menu.
+
+Building Materials
+
+- Wood Planks – Made from logs.
+- Nails – Found in loot crates or crafted from iron.
+- Cordage – Made from fibre.
+- Metal Scrap – Found in the environment.

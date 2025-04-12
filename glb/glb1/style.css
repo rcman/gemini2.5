@@ -1,0 +1,67 @@
+html, body {
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+}
+
+#renderCanvas {
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    display: block;
+}
+
+#loadingScreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #333;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2em;
+    z-index: 100;
+    transition: opacity 0.5s ease-out;
+}
+
+#loadingScreen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* --- ADD STYLES FOR GAME OVER --- */
+#gameOverScreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8); /* Semi-transparent black */
+    color: white;
+    display: flex;
+    flex-direction: column; /* Stack elements vertically */
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5em;
+    z-index: 110; /* Ensure it's above loading and canvas */
+    text-align: center;
+}
+
+#gameOverScreen h1 {
+    color: #ff4d4d; /* Reddish color for game over */
+    margin-bottom: 20px;
+}
+
+#gameOverScreen button {
+    padding: 10px 20px;
+    font-size: 1em;
+    cursor: pointer;
+    margin-top: 30px;
+}
+/* --- END GAME OVER STYLES --- */

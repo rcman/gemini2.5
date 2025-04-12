@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Babylon.js Survival World</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Babylon.js Core -->
+    <script src="babylon.js"></script>
+    <!-- Babylon.js Loaders -->
+    <script src="babylonjs.loaders.min.js"></script>
+    <!-- Babylon.js GUI -->
+    <script src="babylon.gui.min.js"></script> {/* <--- ADD THIS LINE */ }
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="loadingScreen">
+        <p>Loading Survival World...</p>
+    </div>
+    <!-- Optional: Game Over Screen -->
+    <div id="gameOverScreen" style="display: none;"> {/* <--- ADD THIS BLOCK */ }
+        <h1>Game Over</h1>
+        <p>Your needs were not met.</p>
+        <button onclick="location.reload()">Restart</button>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
